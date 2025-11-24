@@ -1,10 +1,10 @@
-# Phase 2: Generalization - IAM Authorization Service
+# Phase 2: Generalization - IAM Authorization Service (with GORM)
 
 ## Project Overview
 
 **Project Name**: iam-authorization-service (Phase 2 - Full IAM Platform)  
 **Purpose**: Transform Taskify into a complete, self-hosted IAM platform with advanced authentication and multi-tenant authorization  
-**Key Difference**: Build authentication features IN-HOUSE (no Firebase/Auth0 dependency) + Multi-tenant architecture  
+**Key Difference**: Build authentication IN-HOUSE (no Firebase/Auth0) + Multi-tenant + **GORM ORM**  
 **Duration**: 6-8 weeks
 
 ---
@@ -22,7 +22,7 @@
 AUTHENTICATION:
   Before: Basic (email/password + JWT)
   After:  Complete (OAuth, MFA, email verification, password reset,
-          magic links, account lockout, device management)
+          magic links, account lockout, session management)
 
 AUTHORIZATION:
   Before: RBAC/ABAC for tasks only
@@ -31,6 +31,10 @@ AUTHORIZATION:
 ARCHITECTURE:
   Before: Monolithic app for tasks
   After:  Platform-as-a-Service for external applications
+
+DATABASE:
+  Before: GORM with single-tenant models
+  After:  GORM with multi-tenant models + associations
 
 USE CASE:
   Before: Task management only
@@ -43,49 +47,56 @@ USE CASE:
 
 ### 1. Self-Hosted Authentication (No External Providers)
 
-**Key Decision**: Build all authentication features in-house instead of relying on Firebase/Auth0/Okta.
+**Key Decision**: Build ALL authentication features in-house.
 
 **Why?**
+
 - Full control over authentication flow
-- No vendor lock-in
+- No vendor lock-in (no Firebase/Auth0 dependency)
 - Custom security policies
 - Cost-effective at scale
 - Learning opportunity for enterprise IAM
 - Data sovereignty
 
 **What This Means**:
+
 - Implement OAuth 2.0 server ourselves
 - Handle social login integration directly (Google/GitHub APIs)
-- Build email service integration (SendGrid/SES)
+- Build email service integration (SendGrid/SES as delivery only)
 - Implement MFA/2FA from scratch
 - Create password reset and email verification flows
-- Manage session lifecycle
+- Manage complete session lifecycle
 
-### 2. Multi-Tenant Architecture
+### 2. GORM ORM for All Database Operations
 
-Every resource becomes tenant-scoped:
-- Multiple organizations (tenants) can use the same IAM service
-- Complete data isolation between tenants
-- Each tenant has their own users, roles, permissions, policies
-- Tenant admins can manage their own IAM configuration
+**Why GORM?**
 
-### 3. Dynamic Resource Registration
+- Automatic SQL injection prevention
+- Type-safe database operations
+- Built-in associations (many-to-many, foreign keys)
+- Clean, readable code
+- Automatic migration capabilities
+- Transaction support
+- Scopes for reusable query logic (tenant isolation)
 
-External applications can register their resources:
-- Apps define their own resource types (orders, invoices, documents)
+### 3. Multi-Tenant Architecture
+
+Every resource becomes tenant-scoped using GORM:
+
+- Multiple organizations (tenants) use same IAM service
+- Complete data isolation via tenant_id filtering
+- Each tenant has own users, roles, permissions, policies
+- Tenant admins manage own IAM configuration
+- GORM scopes for automatic tenant filtering
+
+### 4. Dynamic Resource Registration
+
+External applications register resources via API:
+
+- Apps define resource types (orders, invoices, documents)
 - Apps define actions for each resource type
-- IAM service manages permissions for those resources
+- IAM service manages permissions using GORM models
 - Flexible and extensible
-
-### 4. API-First Design
-
-Everything accessible via REST API:
-- Authentication APIs
-- Authorization APIs
-- Tenant management APIs
-- User management APIs
-- Resource registration APIs
-- SDKs for popular languages (Go, Node.js, Python)
 
 ---
 
@@ -95,17 +106,17 @@ Everything accessible via REST API:
 iam-authorization-service/
 ├── cmd/
 │   ├── api/
-│   │   └── main.go                        # Main API server
-│   └── worker/                             # Background jobs
-│       └── main.go                         # Email worker, token cleanup
+│   │   └── main.go                        # Main API server (GORM init)
+│   └── worker/
+│       └── main.go                         # Background jobs
 │
 ├── internal/
 │   ├── api/
 │   │   ├── router.go                       # Enhanced routing
-│   │   ├── middleware.go                   # Tenant, rate limit middleware
-│   │   └── server.go                       # Server with graceful shutdown
+│   │   ├── middleware.go                   # GORM-aware middleware
+│   │   └── server.go                       # Server with GORM
 │   │
-│   ├── handlers/
+│   ├── handlers/                           # HTTP handlers
 │   │   ├── auth_handler.go                 # Enhanced authentication
 │   │   ├── oauth_handler.go                # OAuth 2.0 endpoints (NEW)
 │   │   ├── mfa_handler.go                  # MFA management (NEW)
@@ -118,137 +129,96 @@ iam-authorization-service/
 │   │   ├── task_handler.go                 # Demo app (optional)
 │   │   └── webhook_handler.go              # Webhooks (NEW)
 │   │
-│   ├── services/
+│   ├── services/                           # Business logic
 │   │   ├── auth_service.go                 # Enhanced auth
 │   │   ├── oauth_service.go                # OAuth 2.0 logic (NEW)
 │   │   ├── social_login_service.go         # Google/GitHub (NEW)
 │   │   ├── mfa_service.go                  # TOTP/SMS (NEW)
 │   │   ├── email_service.go                # Email delivery (NEW)
-│   │   ├── verification_service.go         # Email/phone verify (NEW)
+│   │   ├── verification_service.go         # Email verify (NEW)
 │   │   ├── password_service.go             # Reset flows (NEW)
 │   │   ├── authz_service.go                # Multi-tenant authz
 │   │   ├── tenant_service.go               # Tenant logic (NEW)
 │   │   ├── resource_service.go             # Dynamic resources (NEW)
-│   │   ├── session_service.go              # Advanced sessions (NEW)
-│   │   ├── audit_service.go                # Audit logging (NEW)
-│   │   └── webhook_service.go              # Event webhooks (NEW)
+│   │   ├── session_service.go              # Sessions (NEW)
+│   │   └── audit_service.go                # Audit logging (NEW)
 │   │
-│   ├── repository/
-│   │   ├── user_repository.go              # Multi-tenant
-│   │   ├── token_repository.go
-│   │   ├── tenant_repository.go            # (NEW)
-│   │   ├── oauth_client_repository.go      # (NEW)
-│   │   ├── mfa_repository.go               # (NEW)
-│   │   ├── verification_repository.go      # (NEW)
-│   │   ├── resource_type_repository.go     # Enhanced
-│   │   ├── role_repository.go              # Multi-tenant
-│   │   ├── permission_repository.go        # Multi-tenant
-│   │   ├── policy_repository.go            # Multi-tenant
-│   │   ├── session_repository.go           # (NEW)
-│   │   ├── audit_repository.go             # (NEW)
-│   │   └── webhook_repository.go           # (NEW)
+│   ├── repository/                         # GORM repositories
+│   │   ├── user_repository.go              # Multi-tenant GORM
+│   │   ├── token_repository.go             # GORM
+│   │   ├── tenant_repository.go            # (NEW) GORM
+│   │   ├── oauth_client_repository.go      # (NEW) GORM
+│   │   ├── mfa_repository.go               # (NEW) GORM
+│   │   ├── verification_repository.go      # (NEW) GORM
+│   │   ├── password_reset_repository.go    # (NEW) GORM
+│   │   ├── resource_type_repository.go     # Enhanced GORM
+│   │   ├── role_repository.go              # Multi-tenant GORM
+│   │   ├── permission_repository.go        # Multi-tenant GORM
+│   │   ├── session_repository.go           # (NEW) GORM
+│   │   └── audit_repository.go             # (NEW) GORM
 │   │
-│   ├── models/
-│   │   ├── user.go                         # Enhanced
-│   │   ├── tenant.go                       # (NEW)
-│   │   ├── oauth.go                        # OAuth models (NEW)
-│   │   ├── mfa.go                          # MFA models (NEW)
-│   │   ├── verification.go                 # Verification models (NEW)
-│   │   ├── session.go                      # Session models (NEW)
-│   │   ├── resource_type.go                # Enhanced
-│   │   ├── role.go                         # Multi-tenant
-│   │   ├── permission.go                   # Multi-tenant
-│   │   ├── policy.go
-│   │   ├── audit.go                        # (NEW)
-│   │   └── webhook.go                      # (NEW)
+│   ├── models/                             # GORM models
+│   │   ├── user.go                         # Enhanced with GORM tags
+│   │   ├── tenant.go                       # (NEW) GORM model
+│   │   ├── oauth.go                        # (NEW) GORM model
+│   │   ├── mfa.go                          # (NEW) GORM model
+│   │   ├── verification.go                 # (NEW) GORM model
+│   │   ├── password_reset.go               # (NEW) GORM model
+│   │   ├── session.go                      # (NEW) GORM model
+│   │   ├── resource_type.go                # Enhanced GORM
+│   │   ├── role.go                         # Multi-tenant GORM
+│   │   ├── permission.go                   # Multi-tenant GORM
+│   │   └── audit.go                        # (NEW) GORM model
 │   │
 │   ├── middleware/
-│   │   ├── auth.go                         # Enhanced JWT
+│   │   ├── auth.go                         # JWT validation
 │   │   ├── tenant.go                       # Tenant isolation (NEW)
+│   │   ├── authorization.go                # Permission checking
+│   │   └── rate_limit.go                   # (NEW)
+│   │
+│   ├── oauth/                              # OAuth 2.0 (NEW)
+│   │   ├── server.go
 │   │   ├── authorization.go
-│   │   ├── rate_limit.go                   # (NEW)
-│   │   └── cors.go                         # (NEW)
+│   │   └── token.go
 │   │
-│   ├── oauth/                              # OAuth 2.0 implementation (NEW)
-│   │   ├── server.go                       # OAuth server
-│   │   ├── authorization.go                # Authorization code flow
-│   │   ├── token.go                        # Token exchange
-│   │   └── grants.go                       # Grant types
-│   │
-│   ├── mfa/                                # MFA implementation (NEW)
-│   │   ├── totp.go                         # Time-based OTP
-│   │   ├── sms.go                          # SMS OTP
-│   │   └── backup_codes.go                 # Backup codes
-│   │
-│   ├── providers/                          # Social login providers (NEW)
-│   │   ├── google.go                       # Google OAuth
-│   │   ├── github.go                       # GitHub OAuth
-│   │   └── provider.go                     # Provider interface
+│   ├── providers/                          # Social login (NEW)
+│   │   ├── google.go
+│   │   ├── github.go
+│   │   └── provider.go
 │   │
 │   ├── email/                              # Email service (NEW)
-│   │   ├── client.go                       # Email client interface
-│   │   ├── sendgrid.go                     # SendGrid implementation
-│   │   ├── ses.go                          # AWS SES implementation
-│   │   └── templates.go                    # Email templates
-│   │
-│   ├── workers/                            # Background jobs (NEW)
-│   │   ├── email_worker.go                 # Email queue
-│   │   ├── token_cleanup_worker.go         # Expired tokens
-│   │   └── audit_worker.go                 # Audit log processing
+│   │   ├── client.go
+│   │   ├── sendgrid.go
+│   │   └── templates.go
 │   │
 │   ├── database/
-│   │   └── postgres.go
+│   │   └── postgres.go                     # GORM connection
 │   │
 │   └── utils/
 │       ├── jwt.go
 │       ├── password.go
-│       ├── totp.go                         # TOTP utilities (NEW)
-│       ├── crypto.go                       # Encryption (NEW)
+│       ├── totp.go                         # (NEW)
 │       └── validator.go
 │
 ├── pkg/                                    # Public SDK
 │   └── iamsdk/
-│       ├── client.go                       # SDK client
-│       ├── auth.go                         # Auth methods
-│       ├── authz.go                        # Authz methods
-│       ├── tenant.go                       # Tenant methods
-│       └── examples/                       # Usage examples
+│       ├── client.go
+│       ├── auth.go
+│       └── authz.go
 │
 ├── database-migrations/
-│   └── migrations/                         # Enhanced schema
+│   └── migrations/                         # golang-migrate files
+│
+├── examples/                               # Example apps
+│   ├── ecommerce-app/
+│   └── taskify-client/
 │
 ├── config/
 │   ├── config.go
-│   └── config.yaml                         # Enhanced config
+│   └── config.yaml
 │
-├── scripts/
-│   ├── seed.sql
-│   ├── create_tenant.sh                    # (NEW)
-│   └── run-workers.sh                      # (NEW)
-│
-├── docs/
-│   ├── api/
-│   │   └── swagger.yaml                    # Full API docs
-│   ├── guides/
-│   │   ├── getting-started.md
-│   │   ├── multi-tenancy.md
-│   │   ├── oauth-setup.md
-│   │   └── sdk-usage.md
-│   └── architecture.md
-│
-├── examples/                               # Example integrations
-│   ├── ecommerce-app/                      # E-commerce using IAM
-│   ├── hr-system/                          # HR app using IAM
-│   └── taskify/                            # Taskify as client app
-│
-├── web/                                    # Admin dashboard (optional)
-│   ├── src/
-│   ├── public/
-│   └── package.json
-│
-├── docker-compose.yml                      # Multi-service setup
+├── docker-compose.yml
 ├── Dockerfile
-├── .env.example                            # Enhanced env vars
 ├── Makefile
 └── README.md
 ```
@@ -257,11 +227,9 @@ iam-authorization-service/
 
 ## PHASE 1: MULTI-TENANT FOUNDATION
 
-### Task 1.1: Multi-Tenant Database Schema
+### Task 1.1: Multi-Tenant Database Migrations
 
-**Goal**: Add tenant isolation to all existing tables
-
-**Migration 000008**: `create_tenants_table`
+**Migration 000008**: `create_tenants_table.up.sql`
 
 ```sql
 CREATE TABLE tenants (
@@ -279,31 +247,22 @@ CREATE INDEX idx_tenants_subdomain ON tenants(subdomain);
 CREATE INDEX idx_tenants_status ON tenants(status);
 ```
 
-**Migration 000009**: `add_tenant_id_to_existing_tables`
+**Migration 000009**: `add_tenant_id_to_existing_tables.up.sql`
 
 ```sql
--- Add tenant_id to users table
+-- Add tenant_id to all existing tables
 ALTER TABLE users ADD COLUMN tenant_id UUID REFERENCES tenants(id);
+ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMP;
 CREATE INDEX idx_users_tenant ON users(tenant_id);
 
--- Add tenant_id to roles table
 ALTER TABLE roles ADD COLUMN tenant_id UUID REFERENCES tenants(id);
 CREATE INDEX idx_roles_tenant ON roles(tenant_id);
 
--- Add tenant_id to permissions table (keep some global)
 ALTER TABLE permissions ADD COLUMN tenant_id UUID REFERENCES tenants(id);
 ALTER TABLE permissions ADD COLUMN is_global BOOLEAN DEFAULT false;
 CREATE INDEX idx_permissions_tenant ON permissions(tenant_id);
 
--- Add tenant_id to resource_types (for dynamic registration)
-ALTER TABLE resource_types ADD COLUMN tenant_id UUID REFERENCES tenants(id);
-CREATE INDEX idx_resource_types_tenant ON resource_types(tenant_id);
-
--- Add tenant_id to policies
-ALTER TABLE policies ADD COLUMN tenant_id UUID REFERENCES tenants(id);
-CREATE INDEX idx_policies_tenant ON policies(tenant_id);
-
--- Add tenant_id to tasks (demo app)
 ALTER TABLE tasks ADD COLUMN tenant_id UUID REFERENCES tenants(id);
 CREATE INDEX idx_tasks_tenant ON tasks(tenant_id);
 
@@ -314,41 +273,122 @@ UPDATE roles SET tenant_id = (SELECT id FROM tenants WHERE subdomain = 'default'
 UPDATE tasks SET tenant_id = (SELECT id FROM tenants WHERE subdomain = 'default');
 ```
 
-### Task 1.2: Tenant Management
+### Task 1.2: Tenant GORM Model
 
 **File**: `internal/models/tenant.go`
 
 ```go
 package models
 
-import "time"
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+    "gorm.io/datatypes"
+)
 
 type Tenant struct {
-    ID        string                 `json:"id"`
-    Name      string                 `json:"name"`
-    Subdomain string                 `json:"subdomain"`
-    Status    string                 `json:"status"`
-    Plan      string                 `json:"plan"`
-    Settings  map[string]interface{} `json:"settings"`
-    CreatedAt time.Time              `json:"created_at"`
-    UpdatedAt time.Time              `json:"updated_at"`
+    ID        string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    Name      string         `gorm:"type:varchar(255);not null" json:"name"`
+    Subdomain string         `gorm:"type:varchar(100);uniqueIndex" json:"subdomain"`
+    Status    string         `gorm:"type:varchar(50);default:'active';index" json:"status"`
+    Plan      string         `gorm:"type:varchar(50);default:'free'" json:"plan"`
+    Settings  datatypes.JSON `gorm:"type:jsonb;default:'{}'" json:"settings"`
+    CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+
+    // Associations (all tenant-scoped data)
+    Users       []User       `gorm:"foreignKey:TenantID;constraint:OnDelete:CASCADE" json:"-"`
+    Roles       []Role       `gorm:"foreignKey:TenantID;constraint:OnDelete:CASCADE" json:"-"`
+    Permissions []Permission `gorm:"foreignKey:TenantID;constraint:OnDelete:CASCADE" json:"-"`
+    Tasks       []Task       `gorm:"foreignKey:TenantID;constraint:OnDelete:CASCADE" json:"-"`
+}
+
+func (t *Tenant) BeforeCreate(tx *gorm.DB) error {
+    if t.ID == "" {
+        t.ID = uuid.New().String()
+    }
+    return nil
+}
+
+func (Tenant) TableName() string {
+    return "tenants"
 }
 
 type CreateTenantRequest struct {
-    Name      string                 `json:"name" binding:"required"`
-    Subdomain string                 `json:"subdomain" binding:"required"`
-    AdminEmail string                `json:"admin_email" binding:"required"`
-    Plan      string                 `json:"plan"`
-    Settings  map[string]interface{} `json:"settings"`
-}
-
-type UpdateTenantRequest struct {
-    Name     *string                `json:"name,omitempty"`
-    Status   *string                `json:"status,omitempty"`
-    Plan     *string                `json:"plan,omitempty"`
-    Settings map[string]interface{} `json:"settings,omitempty"`
+    Name       string                 `json:"name" binding:"required"`
+    Subdomain  string                 `json:"subdomain" binding:"required"`
+    AdminEmail string                 `json:"admin_email" binding:"required,email"`
+    AdminPassword string              `json:"admin_password" binding:"required,min=8"`
+    Plan       string                 `json:"plan"`
+    Settings   map[string]interface{} `json:"settings"`
 }
 ```
+
+### Task 1.3: Update Phase 1 Models for Multi-Tenancy
+
+**File**: `internal/models/user.go` (Phase 2 enhancement)
+
+```go
+package models
+
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+)
+
+type User struct {
+    ID              string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    Email           string     `gorm:"type:varchar(255);not null" json:"email"`
+    PasswordHash    string     `gorm:"type:varchar(255);not null" json:"-"`
+    IsActive        bool       `gorm:"default:true" json:"is_active"`
+    EmailVerified   bool       `gorm:"default:false" json:"email_verified"` // NEW
+    EmailVerifiedAt *time.Time `gorm:"type:timestamp" json:"email_verified_at,omitempty"` // NEW
+    TenantID        string     `gorm:"type:uuid;index;not null" json:"tenant_id"` // NEW
+    CreatedAt       time.Time  `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt       time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+
+    // Associations
+    Tenant             Tenant              `gorm:"foreignKey:TenantID" json:"-"` // NEW
+    Tokens             []Token             `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
+    Roles              []Role              `gorm:"many2many:user_roles;" json:"-"`
+    Tasks              []Task              `gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE" json:"-"`
+    MFASettings        *MFASettings        `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"` // NEW
+    EmailVerifications []EmailVerification `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"` // NEW
+    PasswordResets     []PasswordReset     `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"` // NEW
+}
+
+// Composite unique index: email + tenant_id (same email different tenants)
+func (User) GormIndexes() []string {
+    return []string{"idx_users_email_tenant:email,tenant_id,unique"}
+}
+```
+
+**File**: `internal/models/role.go` (Phase 2 enhancement)
+
+```go
+// Add tenant_id to Role model:
+type Role struct {
+    ID          string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    Name        string    `gorm:"type:varchar(50);not null" json:"name"`
+    Description string    `gorm:"type:text" json:"description"`
+    TenantID    string    `gorm:"type:uuid;index;not null" json:"tenant_id"` // NEW
+    CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+    // Associations
+    Tenant      Tenant       `gorm:"foreignKey:TenantID" json:"-"` // NEW
+    Users       []User       `gorm:"many2many:user_roles;" json:"-"`
+    Permissions []Permission `gorm:"many2many:role_permissions;" json:"-"`
+}
+
+// Composite unique index: name + tenant_id
+func (Role) GormIndexes() []string {
+    return []string{"idx_roles_name_tenant:name,tenant_id,unique"}
+}
+```
+
+### Task 1.4: Tenant Repository with GORM
 
 **File**: `internal/repository/tenant_repository.go`
 
@@ -356,46 +396,75 @@ type UpdateTenantRequest struct {
 package repository
 
 import (
-    "database/sql"
-    "encoding/json"
+    "fmt"
+    "gorm.io/gorm"
     "github.com/yourusername/iam-authorization-service/internal/models"
 )
 
 type TenantRepository struct {
-    db *sql.DB
+    db *gorm.DB
 }
 
-func NewTenantRepository(db *sql.DB) *TenantRepository {
+func NewTenantRepository(db *gorm.DB) *TenantRepository {
     return &TenantRepository{db: db}
 }
 
+// Create inserts a new tenant (GORM prevents SQL injection)
 func (r *TenantRepository) Create(tenant *models.Tenant) error {
-    settingsJSON, _ := json.Marshal(tenant.Settings)
-    query := `
-        INSERT INTO tenants (name, subdomain, status, plan, settings)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, created_at, updated_at
-    `
-    return r.db.QueryRow(query, tenant.Name, tenant.Subdomain, tenant.Status, tenant.Plan, settingsJSON).
-        Scan(&tenant.ID, &tenant.CreatedAt, &tenant.UpdatedAt)
+    return r.db.Create(tenant).Error
 }
 
+// GetByID retrieves tenant by ID with associations
 func (r *TenantRepository) GetByID(id string) (*models.Tenant, error) {
-    // Implementation with tenant data
+    var tenant models.Tenant
+    if err := r.db.Preload("Users").Preload("Roles").
+        First(&tenant, "id = ?", id).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, fmt.Errorf("tenant not found")
+        }
+        return nil, err
+    }
+    return &tenant, nil
 }
 
+// GetBySubdomain retrieves tenant by subdomain
 func (r *TenantRepository) GetBySubdomain(subdomain string) (*models.Tenant, error) {
-    // Implementation
+    var tenant models.Tenant
+    if err := r.db.Where("subdomain = ? AND status = ?", subdomain, "active").
+        First(&tenant).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, fmt.Errorf("tenant not found")
+        }
+        return nil, err
+    }
+    return &tenant, nil
 }
 
+// Update updates tenant information
 func (r *TenantRepository) Update(tenant *models.Tenant) error {
-    // Implementation
+    return r.db.Save(tenant).Error
 }
 
-func (r *TenantRepository) Delete(id string) error {
-    // Soft delete
+// SoftDelete marks tenant as deleted
+func (r *TenantRepository) SoftDelete(id string) error {
+    return r.db.Model(&models.Tenant{}).
+        Where("id = ?", id).
+        Update("status", "deleted").Error
+}
+
+// GetAll retrieves all active tenants
+func (r *TenantRepository) GetAll() ([]models.Tenant, error) {
+    var tenants []models.Tenant
+    if err := r.db.Where("status = ?", "active").
+        Order("created_at DESC").
+        Find(&tenants).Error; err != nil {
+        return nil, err
+    }
+    return tenants, nil
 }
 ```
+
+### Task 1.5: Tenant Service
 
 **File**: `internal/services/tenant_service.go`
 
@@ -403,6 +472,7 @@ func (r *TenantRepository) Delete(id string) error {
 package services
 
 import (
+    "gorm.io/gorm"
     "github.com/yourusername/iam-authorization-service/internal/models"
     "github.com/yourusername/iam-authorization-service/internal/repository"
     "github.com/yourusername/iam-authorization-service/internal/utils"
@@ -412,24 +482,92 @@ type TenantService struct {
     tenantRepo *repository.TenantRepository
     userRepo   *repository.UserRepository
     roleRepo   *repository.RoleRepository
+    permRepo   *repository.PermissionRepository
+    db         *gorm.DB
 }
 
-func NewTenantService(tenantRepo *repository.TenantRepository, userRepo *repository.UserRepository, roleRepo *repository.RoleRepository) *TenantService {
+func NewTenantService(
+    tenantRepo *repository.TenantRepository,
+    userRepo *repository.UserRepository,
+    roleRepo *repository.RoleRepository,
+    permRepo *repository.PermissionRepository,
+    db *gorm.DB,
+) *TenantService {
     return &TenantService{
         tenantRepo: tenantRepo,
         userRepo:   userRepo,
         roleRepo:   roleRepo,
+        permRepo:   permRepo,
+        db:         db,
     }
 }
 
-// CreateTenant creates a new tenant with admin user and default roles
+// CreateTenant creates new tenant with admin user and default roles (GORM transaction)
 func (s *TenantService) CreateTenant(req models.CreateTenantRequest) (*models.Tenant, error) {
-    // 1. Validate subdomain uniqueness
-    // 2. Create tenant
-    // 3. Create admin user for tenant
-    // 4. Create default roles (user, admin) for tenant
-    // 5. Assign admin role to admin user
-    // 6. Return tenant
+    var tenant *models.Tenant
+
+    // Use GORM transaction to ensure atomicity
+    err := s.db.Transaction(func(tx *gorm.DB) error {
+        // 1. Validate subdomain uniqueness
+        if _, err := s.tenantRepo.GetBySubdomain(req.Subdomain); err == nil {
+            return utils.ValidationError("subdomain already exists")
+        }
+
+        // 2. Create tenant
+        tenant = &models.Tenant{
+            Name:      req.Name,
+            Subdomain: req.Subdomain,
+            Status:    "active",
+            Plan:      req.Plan,
+        }
+        if err := tx.Create(tenant).Error; err != nil {
+            return utils.InternalServerError("failed to create tenant")
+        }
+
+        // 3. Create admin user for tenant
+        hashedPassword, _ := utils.HashPassword(req.AdminPassword)
+        adminUser := &models.User{
+            Email:        req.AdminEmail,
+            PasswordHash: hashedPassword,
+            TenantID:     tenant.ID,
+            IsActive:     true,
+            EmailVerified: true, // Admin is pre-verified
+        }
+        if err := tx.Create(adminUser).Error; err != nil {
+            return utils.InternalServerError("failed to create admin user")
+        }
+
+        // 4. Create default roles for tenant
+        userRole := &models.Role{
+            Name:        "user",
+            Description: "Regular user",
+            TenantID:    tenant.ID,
+        }
+        adminRole := &models.Role{
+            Name:        "admin",
+            Description: "Administrator",
+            TenantID:    tenant.ID,
+        }
+        if err := tx.Create(&userRole).Error; err != nil {
+            return err
+        }
+        if err := tx.Create(&adminRole).Error; err != nil {
+            return err
+        }
+
+        // 5. Assign admin role to admin user
+        userRoleAssignment := models.UserRole{
+            UserID: adminUser.ID,
+            RoleID: adminRole.ID,
+        }
+        if err := tx.Create(&userRoleAssignment).Error; err != nil {
+            return err
+        }
+
+        return nil
+    })
+
+    return tenant, err
 }
 
 // GetTenant retrieves tenant by ID
@@ -439,16 +577,35 @@ func (s *TenantService) GetTenant(tenantID string) (*models.Tenant, error) {
 
 // UpdateTenant updates tenant settings
 func (s *TenantService) UpdateTenant(tenantID string, req models.UpdateTenantRequest) (*models.Tenant, error) {
-    // Implementation
+    tenant, err := s.tenantRepo.GetByID(tenantID)
+    if err != nil {
+        return nil, err
+    }
+
+    if req.Name != nil {
+        tenant.Name = *req.Name
+    }
+    if req.Status != nil {
+        tenant.Status = *req.Status
+    }
+    if req.Plan != nil {
+        tenant.Plan = *req.Plan
+    }
+
+    if err := s.tenantRepo.Update(tenant); err != nil {
+        return nil, err
+    }
+
+    return tenant, nil
 }
 
 // DeleteTenant soft deletes a tenant
 func (s *TenantService) DeleteTenant(tenantID string) error {
-    // Implementation
+    return s.tenantRepo.SoftDelete(tenantID)
 }
 ```
 
-### Task 1.3: Tenant Isolation Middleware
+### Task 1.6: Tenant Isolation Middleware
 
 **File**: `internal/middleware/tenant.go`
 
@@ -456,10 +613,11 @@ func (s *TenantService) DeleteTenant(tenantID string) error {
 package middleware
 
 import (
+    "strings"
+    "net/http"
+
     "github.com/gin-gonic/gin"
     "github.com/yourusername/iam-authorization-service/internal/repository"
-    "net/http"
-    "strings"
 )
 
 type TenantMiddleware struct {
@@ -470,7 +628,7 @@ func NewTenantMiddleware(tenantRepo *repository.TenantRepository) *TenantMiddlew
     return &TenantMiddleware{tenantRepo: tenantRepo}
 }
 
-// ResolveTenant extracts tenant from subdomain or header
+// ResolveTenant extracts tenant from subdomain, header, or JWT
 func (m *TenantMiddleware) ResolveTenant() gin.HandlerFunc {
     return func(c *gin.Context) {
         var tenantID string
@@ -478,10 +636,9 @@ func (m *TenantMiddleware) ResolveTenant() gin.HandlerFunc {
         // Option 1: Extract from subdomain (tenant.yourapi.com)
         host := c.Request.Host
         parts := strings.Split(host, ".")
-        if len(parts) > 2 {
+        if len(parts) >= 3 {
             subdomain := parts[0]
-            tenant, err := m.tenantRepo.GetBySubdomain(subdomain)
-            if err == nil {
+            if tenant, err := m.tenantRepo.GetBySubdomain(subdomain); err == nil {
                 tenantID = tenant.ID
             }
         }
@@ -502,7 +659,7 @@ func (m *TenantMiddleware) ResolveTenant() gin.HandlerFunc {
             return
         }
 
-        // Set tenant in context for downstream handlers
+        // Set tenant_id in context for all downstream handlers/repositories
         c.Set("tenant_id", tenantID)
         c.Next()
     }
@@ -522,13 +679,45 @@ func RequireTenant() gin.HandlerFunc {
 }
 ```
 
+### Task 1.7: GORM Scope for Tenant Isolation
+
+**File**: `internal/repository/scopes.go` (NEW)
+
+```go
+package repository
+
+import "gorm.io/gorm"
+
+// TenantScope applies tenant filtering to GORM queries
+func TenantScope(tenantID string) func(db *gorm.DB) *gorm.DB {
+    return func(db *gorm.DB) *gorm.DB {
+        if tenantID != "" {
+            return db.Where("tenant_id = ?", tenantID)
+        }
+        return db
+    }
+}
+
+// ActiveScope filters for active records
+func ActiveScope(db *gorm.DB) *gorm.DB {
+    return db.Where("is_active = ?", true)
+}
+
+// Example usage in repository:
+// func (r *UserRepository) GetAllByTenant(tenantID string) ([]models.User, error) {
+//     var users []models.User
+//     err := r.db.Scopes(TenantScope(tenantID), ActiveScope).Find(&users).Error
+//     return users, err
+// }
+```
+
 ---
 
-## PHASE 2: ENHANCED AUTHENTICATION MODULE
+## PHASE 2: ENHANCED AUTHENTICATION - EMAIL VERIFICATION
 
-### Task 2.1: Email Verification System
+### Task 2.1: Email Verification Database
 
-**Migration 000010**: `create_email_verifications_table`
+**Migration 000010**: `create_email_verifications_table.up.sql`
 
 ```sql
 CREATE TABLE email_verifications (
@@ -543,132 +732,104 @@ CREATE TABLE email_verifications (
 
 CREATE INDEX idx_email_verifications_token ON email_verifications(token);
 CREATE INDEX idx_email_verifications_user ON email_verifications(user_id);
-
--- Add email_verified flag to users
-ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT false;
-ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMP;
 ```
+
+### Task 2.2: Email Verification GORM Model
 
 **File**: `internal/models/verification.go`
 
 ```go
 package models
 
-import "time"
-
-type EmailVerification struct {
-    ID         string     `json:"id"`
-    UserID     string     `json:"user_id"`
-    Email      string     `json:"email"`
-    Token      string     `json:"token"`
-    ExpiresAt  time.Time  `json:"expires_at"`
-    VerifiedAt *time.Time `json:"verified_at,omitempty"`
-    CreatedAt  time.Time  `json:"created_at"`
-}
-
-type SendVerificationRequest struct {
-    Email string `json:"email" binding:"required,email"`
-}
-
-type VerifyEmailRequest struct {
-    Token string `json:"token" binding:"required"`
-}
-```
-
-**File**: `internal/services/verification_service.go`
-
-```go
-package services
-
 import (
-    "crypto/rand"
-    "encoding/base64"
     "time"
-
-    "github.com/yourusername/iam-authorization-service/internal/models"
-    "github.com/yourusername/iam-authorization-service/internal/repository"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
 )
 
-type VerificationService struct {
-    verificationRepo *repository.VerificationRepository
-    userRepo         *repository.UserRepository
-    emailService     *EmailService
+type EmailVerification struct {
+    ID         string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    UserID     string     `gorm:"type:uuid;not null;index" json:"user_id"`
+    Email      string     `gorm:"type:varchar(255);not null" json:"email"`
+    Token      string     `gorm:"type:varchar(255);uniqueIndex;not null" json:"token"`
+    ExpiresAt  time.Time  `gorm:"not null" json:"expires_at"`
+    VerifiedAt *time.Time `gorm:"type:timestamp" json:"verified_at,omitempty"`
+    CreatedAt  time.Time  `gorm:"autoCreateTime" json:"created_at"`
+
+    // Association
+    User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 }
 
-func NewVerificationService(verificationRepo *repository.VerificationRepository, userRepo *repository.UserRepository, emailService *EmailService) *VerificationService {
-    return &VerificationService{
-        verificationRepo: verificationRepo,
-        userRepo:         userRepo,
-        emailService:     emailService,
+func (e *EmailVerification) BeforeCreate(tx *gorm.DB) error {
+    if e.ID == "" {
+        e.ID = uuid.New().String()
     }
+    return nil
 }
 
-// SendVerificationEmail sends verification email to user
-func (s *VerificationService) SendVerificationEmail(userID, email string) error {
-    // 1. Generate secure random token
-    token, err := s.generateToken()
-    if err != nil {
-        return err
-    }
-
-    // 2. Create verification record (expires in 24 hours)
-    verification := &models.EmailVerification{
-        UserID:    userID,
-        Email:     email,
-        Token:     token,
-        ExpiresAt: time.Now().Add(24 * time.Hour),
-    }
-
-    if err := s.verificationRepo.Create(verification); err != nil {
-        return err
-    }
-
-    // 3. Send email with verification link
-    verificationLink := fmt.Sprintf("https://yourapi.com/v1/auth/verify-email?token=%s", token)
-    return s.emailService.SendVerificationEmail(email, verificationLink)
-}
-
-// VerifyEmail verifies user email with token
-func (s *VerificationService) VerifyEmail(token string) error {
-    // 1. Get verification record
-    verification, err := s.verificationRepo.GetByToken(token)
-    if err != nil {
-        return utils.ValidationError("invalid verification token")
-    }
-
-    // 2. Check if already verified
-    if verification.VerifiedAt != nil {
-        return utils.ValidationError("email already verified")
-    }
-
-    // 3. Check if expired
-    if time.Now().After(verification.ExpiresAt) {
-        return utils.ValidationError("verification token expired")
-    }
-
-    // 4. Mark as verified
-    now := time.Now()
-    verification.VerifiedAt = &now
-    if err := s.verificationRepo.Update(verification); err != nil {
-        return err
-    }
-
-    // 5. Update user email_verified flag
-    return s.userRepo.MarkEmailVerified(verification.UserID)
-}
-
-func (s *VerificationService) generateToken() (string, error) {
-    b := make([]byte, 32)
-    if _, err := rand.Read(b); err != nil {
-        return "", err
-    }
-    return base64.URLEncoding.EncodeToString(b), nil
+func (EmailVerification) TableName() string {
+    return "email_verifications"
 }
 ```
 
-### Task 2.2: Password Reset System
+### Task 2.3: Email Verification Repository (GORM)
 
-**Migration 000011**: `create_password_resets_table`
+**File**: `internal/repository/verification_repository.go`
+
+```go
+package repository
+
+import (
+    "fmt"
+    "time"
+    "gorm.io/gorm"
+    "github.com/yourusername/iam-authorization-service/internal/models"
+)
+
+type VerificationRepository struct {
+    db *gorm.DB
+}
+
+func NewVerificationRepository(db *gorm.DB) *VerificationRepository {
+    return &VerificationRepository{db: db}
+}
+
+// Create inserts verification record
+func (r *VerificationRepository) Create(verification *models.EmailVerification) error {
+    return r.db.Create(verification).Error
+}
+
+// GetByToken retrieves verification by token
+func (r *VerificationRepository) GetByToken(token string) (*models.EmailVerification, error) {
+    var verification models.EmailVerification
+    if err := r.db.Where("token = ?", token).First(&verification).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, fmt.Errorf("verification not found")
+        }
+        return nil, err
+    }
+    return &verification, nil
+}
+
+// Update updates verification record
+func (r *VerificationRepository) Update(verification *models.EmailVerification) error {
+    return r.db.Save(verification).Error
+}
+
+// DeleteExpired removes expired unverified tokens
+func (r *VerificationRepository) DeleteExpired() error {
+    return r.db.Where("expires_at < ? AND verified_at IS NULL", time.Now()).
+        Delete(&models.EmailVerification{}).Error
+}
+```
+
+---
+
+## PHASE 3: PASSWORD RESET SYSTEM
+
+### Task 3.1: Password Reset Database
+
+**Migration 000011**: `create_password_resets_table.up.sql`
 
 ```sql
 CREATE TABLE password_resets (
@@ -684,313 +845,111 @@ CREATE INDEX idx_password_resets_token ON password_resets(token);
 CREATE INDEX idx_password_resets_user ON password_resets(user_id);
 ```
 
+### Task 3.2: Password Reset GORM Model
+
 **File**: `internal/models/password_reset.go`
 
 ```go
 package models
 
-import "time"
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+)
 
 type PasswordReset struct {
-    ID        string     `json:"id"`
-    UserID    string     `json:"user_id"`
-    Token     string     `json:"token"`
-    ExpiresAt time.Time  `json:"expires_at"`
-    UsedAt    *time.Time `json:"used_at,omitempty"`
-    CreatedAt time.Time  `json:"created_at"`
+    ID        string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    UserID    string     `gorm:"type:uuid;not null;index" json:"user_id"`
+    Token     string     `gorm:"type:varchar(255);uniqueIndex;not null" json:"token"`
+    ExpiresAt time.Time  `gorm:"not null" json:"expires_at"`
+    UsedAt    *time.Time `gorm:"type:timestamp" json:"used_at,omitempty"`
+    CreatedAt time.Time  `gorm:"autoCreateTime" json:"created_at"`
+
+    // Association
+    User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 }
 
-type ForgotPasswordRequest struct {
-    Email string `json:"email" binding:"required,email"`
+func (p *PasswordReset) BeforeCreate(tx *gorm.DB) error {
+    if p.ID == "" {
+        p.ID = uuid.New().String()
+    }
+    return nil
 }
 
-type ResetPasswordRequest struct {
-    Token       string `json:"token" binding:"required"`
-    NewPassword string `json:"new_password" binding:"required,min=8"`
+func (PasswordReset) TableName() string {
+    return "password_resets"
 }
 ```
 
-**File**: `internal/services/password_service.go`
+### Task 3.3: Password Reset Repository (GORM)
+
+**File**: `internal/repository/password_reset_repository.go`
 
 ```go
-package services
+package repository
 
 import (
-    "crypto/rand"
-    "encoding/base64"
+    "fmt"
     "time"
-
+    "gorm.io/gorm"
     "github.com/yourusername/iam-authorization-service/internal/models"
-    "github.com/yourusername/iam-authorization-service/internal/repository"
-    "github.com/yourusername/iam-authorization-service/internal/utils"
 )
 
-type PasswordService struct {
-    passwordResetRepo *repository.PasswordResetRepository
-    userRepo          *repository.UserRepository
-    emailService      *EmailService
+type PasswordResetRepository struct {
+    db *gorm.DB
 }
 
-func NewPasswordService(passwordResetRepo *repository.PasswordResetRepository, userRepo *repository.UserRepository, emailService *EmailService) *PasswordService {
-    return &PasswordService{
-        passwordResetRepo: passwordResetRepo,
-        userRepo:          userRepo,
-        emailService:      emailService,
-    }
+func NewPasswordResetRepository(db *gorm.DB) *PasswordResetRepository {
+    return &PasswordResetRepository{db: db}
 }
 
-// SendPasswordResetEmail sends password reset link
-func (s *PasswordService) SendPasswordResetEmail(email string) error {
-    // 1. Get user by email
-    user, err := s.userRepo.GetByEmail(email)
-    if err != nil {
-        // Don't reveal if email exists
-        return nil
-    }
-
-    // 2. Generate reset token
-    token, err := s.generateToken()
-    if err != nil {
-        return err
-    }
-
-    // 3. Create reset record (expires in 1 hour)
-    reset := &models.PasswordReset{
-        UserID:    user.ID,
-        Token:     token,
-        ExpiresAt: time.Now().Add(1 * time.Hour),
-    }
-
-    if err := s.passwordResetRepo.Create(reset); err != nil {
-        return err
-    }
-
-    // 4. Send email with reset link
-    resetLink := fmt.Sprintf("https://yourapi.com/reset-password?token=%s", token)
-    return s.emailService.SendPasswordResetEmail(email, resetLink)
+// Create inserts password reset record
+func (r *PasswordResetRepository) Create(reset *models.PasswordReset) error {
+    return r.db.Create(reset).Error
 }
 
-// ResetPassword resets user password with token
-func (s *PasswordService) ResetPassword(token, newPassword string) error {
-    // 1. Get reset record
-    reset, err := s.passwordResetRepo.GetByToken(token)
-    if err != nil {
-        return utils.ValidationError("invalid reset token")
+// GetByToken retrieves reset record by token
+func (r *PasswordResetRepository) GetByToken(token string) (*models.PasswordReset, error) {
+    var reset models.PasswordReset
+    if err := r.db.Where("token = ?", token).First(&reset).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, fmt.Errorf("reset token not found")
+        }
+        return nil, err
     }
-
-    // 2. Check if already used
-    if reset.UsedAt != nil {
-        return utils.ValidationError("reset token already used")
-    }
-
-    // 3. Check if expired
-    if time.Now().After(reset.ExpiresAt) {
-        return utils.ValidationError("reset token expired")
-    }
-
-    // 4. Validate new password
-    if err := utils.ValidatePassword(newPassword); err != nil {
-        return err
-    }
-
-    // 5. Hash new password
-    hashedPassword, err := utils.HashPassword(newPassword)
-    if err != nil {
-        return err
-    }
-
-    // 6. Update user password
-    if err := s.userRepo.UpdatePassword(reset.UserID, hashedPassword); err != nil {
-        return err
-    }
-
-    // 7. Mark token as used
-    now := time.Now()
-    reset.UsedAt = &now
-    return s.passwordResetRepo.Update(reset)
+    return &reset, nil
 }
 
-func (s *PasswordService) generateToken() (string, error) {
-    b := make([]byte, 32)
-    if _, err := rand.Read(b); err != nil {
-        return "", err
-    }
-    return base64.URLEncoding.EncodeToString(b), nil
-}
-```
-
-### Task 2.3: Email Service Integration
-
-**File**: `internal/email/client.go`
-
-```go
-package email
-
-// EmailClient interface for sending emails
-type EmailClient interface {
-    Send(to, subject, body string) error
-    SendTemplate(to, templateID string, data map[string]interface{}) error
+// Update updates reset record
+func (r *PasswordResetRepository) Update(reset *models.PasswordReset) error {
+    return r.db.Save(reset).Error
 }
 
-type EmailConfig struct {
-    Provider string // "sendgrid", "ses", "smtp"
-    APIKey   string
-    From     string
-    FromName string
-}
-```
-
-**File**: `internal/email/sendgrid.go`
-
-```go
-package email
-
-import (
-    "github.com/sendgrid/sendgrid-go"
-    "github.com/sendgrid/sendgrid-go/helpers/mail"
-)
-
-type SendGridClient struct {
-    apiKey   string
-    from     string
-    fromName string
-}
-
-func NewSendGridClient(apiKey, from, fromName string) *SendGridClient {
-    return &SendGridClient{
-        apiKey:   apiKey,
-        from:     from,
-        fromName: fromName,
-    }
-}
-
-func (c *SendGridClient) Send(to, subject, body string) error {
-    from := mail.NewEmail(c.fromName, c.from)
-    toEmail := mail.NewEmail("", to)
-    message := mail.NewSingleEmail(from, subject, toEmail, body, body)
-    
-    client := sendgrid.NewSendClient(c.apiKey)
-    _, err := client.Send(message)
-    return err
-}
-
-func (c *SendGridClient) SendTemplate(to, templateID string, data map[string]interface{}) error {
-    // Implementation for dynamic templates
-}
-```
-
-**File**: `internal/email/templates.go`
-
-```go
-package email
-
-const (
-    VerificationEmailTemplate = `
-        <h1>Verify Your Email</h1>
-        <p>Click the link below to verify your email address:</p>
-        <a href="{{.VerificationLink}}">Verify Email</a>
-        <p>This link expires in 24 hours.</p>
-    `
-
-    PasswordResetEmailTemplate = `
-        <h1>Reset Your Password</h1>
-        <p>Click the link below to reset your password:</p>
-        <a href="{{.ResetLink}}">Reset Password</a>
-        <p>This link expires in 1 hour.</p>
-    `
-
-    WelcomeEmailTemplate = `
-        <h1>Welcome to {{.TenantName}}!</h1>
-        <p>Your account has been created successfully.</p>
-    `
-)
-```
-
-**File**: `internal/services/email_service.go`
-
-```go
-package services
-
-import (
-    "bytes"
-    "html/template"
-
-    "github.com/yourusername/iam-authorization-service/internal/email"
-)
-
-type EmailService struct {
-    client email.EmailClient
-}
-
-func NewEmailService(client email.EmailClient) *EmailService {
-    return &EmailService{client: client}
-}
-
-func (s *EmailService) SendVerificationEmail(to, verificationLink string) error {
-    subject := "Verify Your Email Address"
-    body, err := s.renderTemplate(email.VerificationEmailTemplate, map[string]interface{}{
-        "VerificationLink": verificationLink,
-    })
-    if err != nil {
-        return err
-    }
-    return s.client.Send(to, subject, body)
-}
-
-func (s *EmailService) SendPasswordResetEmail(to, resetLink string) error {
-    subject := "Reset Your Password"
-    body, err := s.renderTemplate(email.PasswordResetEmailTemplate, map[string]interface{}{
-        "ResetLink": resetLink,
-    })
-    if err != nil {
-        return err
-    }
-    return s.client.Send(to, subject, body)
-}
-
-func (s *EmailService) SendWelcomeEmail(to, tenantName string) error {
-    subject := "Welcome to " + tenantName
-    body, err := s.renderTemplate(email.WelcomeEmailTemplate, map[string]interface{}{
-        "TenantName": tenantName,
-    })
-    if err != nil {
-        return err
-    }
-    return s.client.Send(to, subject, body)
-}
-
-func (s *EmailService) renderTemplate(tmpl string, data map[string]interface{}) (string, error) {
-    t, err := template.New("email").Parse(tmpl)
-    if err != nil {
-        return "", err
-    }
-
-    var buf bytes.Buffer
-    if err := t.Execute(&buf, data); err != nil {
-        return "", err
-    }
-
-    return buf.String(), nil
+// DeleteExpired removes expired unused tokens
+func (r *PasswordResetRepository) DeleteExpired() error {
+    return r.db.Where("expires_at < ? AND used_at IS NULL", time.Now()).
+        Delete(&models.PasswordReset{}).Error
 }
 ```
 
 ---
 
-## PHASE 3: MULTI-FACTOR AUTHENTICATION (MFA)
+## PHASE 4: MULTI-FACTOR AUTHENTICATION (MFA)
 
-### Task 3.1: TOTP (Time-Based One-Time Password)
+### Task 4.1: MFA Database
 
-**Migration 000012**: `create_mfa_settings_table`
+**Migration 000012**: `create_mfa_settings_table.up.sql`
 
 ```sql
 CREATE TABLE mfa_settings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
     mfa_enabled BOOLEAN DEFAULT false,
-    mfa_method VARCHAR(50),  -- 'totp', 'sms'
+    mfa_method VARCHAR(50),
     totp_secret VARCHAR(255),
     phone_number VARCHAR(20),
-    backup_codes JSONB,  -- Array of hashed backup codes
+    backup_codes JSONB,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -998,433 +957,1006 @@ CREATE TABLE mfa_settings (
 CREATE INDEX idx_mfa_settings_user ON mfa_settings(user_id);
 ```
 
-**File**: `internal/utils/totp.go`
-
-```go
-package utils
-
-import (
-    "crypto/rand"
-    "encoding/base32"
-    "fmt"
-
-    "github.com/pquerna/otp"
-    "github.com/pquerna/otp/totp"
-)
-
-// GenerateTOTPSecret generates a new TOTP secret
-func GenerateTOTPSecret(issuer, accountName string) (string, string, error) {
-    key, err := totp.Generate(totp.GenerateOpts{
-        Issuer:      issuer,
-        AccountName: accountName,
-    })
-    if err != nil {
-        return "", "", err
-    }
-
-    secret := key.Secret()
-    qrCode := key.URL()  // For QR code generation
-
-    return secret, qrCode, nil
-}
-
-// ValidateTOTP validates a TOTP code
-func ValidateTOTP(secret, code string) bool {
-    return totp.Validate(code, secret)
-}
-
-// GenerateBackupCodes generates backup codes for MFA
-func GenerateBackupCodes(count int) ([]string, error) {
-    codes := make([]string, count)
-    for i := 0; i < count; i++ {
-        b := make([]byte, 8)
-        if _, err := rand.Read(b); err != nil {
-            return nil, err
-        }
-        codes[i] = base32.StdEncoding.EncodeToString(b)
-    }
-    return codes, nil
-}
-```
+### Task 4.2: MFA GORM Model
 
 **File**: `internal/models/mfa.go`
 
 ```go
 package models
 
-import "time"
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+    "gorm.io/datatypes"
+)
 
 type MFASettings struct {
-    ID           string    `json:"id"`
-    UserID       string    `json:"user_id"`
-    MFAEnabled   bool      `json:"mfa_enabled"`
-    MFAMethod    string    `json:"mfa_method"`
-    TOTPSecret   string    `json:"-"` // Never expose
-    PhoneNumber  string    `json:"phone_number,omitempty"`
-    BackupCodes  []string  `json:"-"` // Never expose
-    CreatedAt    time.Time `json:"created_at"`
-    UpdatedAt    time.Time `json:"updated_at"`
+    ID          string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    UserID      string         `gorm:"type:uuid;uniqueIndex;not null" json:"user_id"`
+    MFAEnabled  bool           `gorm:"default:false" json:"mfa_enabled"`
+    MFAMethod   string         `gorm:"type:varchar(50)" json:"mfa_method"` // 'totp'
+    TOTPSecret  string         `gorm:"type:varchar(255)" json:"-"` // Never expose
+    PhoneNumber string         `gorm:"type:varchar(20)" json:"phone_number,omitempty"`
+    BackupCodes datatypes.JSON `gorm:"type:jsonb" json:"-"` // Never expose
+    CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt   time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+
+    // Association
+    User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
 }
 
-type EnableMFARequest struct {
-    Method string `json:"method" binding:"required"` // "totp" or "sms"
+func (m *MFASettings) BeforeCreate(tx *gorm.DB) error {
+    if m.ID == "" {
+        m.ID = uuid.New().String()
+    }
+    return nil
 }
 
-type EnableMFAResponse struct {
-    Secret    string   `json:"secret"`
-    QRCode    string   `json:"qr_code"`
-    BackupCodes []string `json:"backup_codes"`
-}
-
-type VerifyMFARequest struct {
-    Code string `json:"code" binding:"required"`
-}
-
-type MFALoginRequest struct {
-    Email    string `json:"email" binding:"required"`
-    Password string `json:"password" binding:"required"`
-    MFACode  string `json:"mfa_code,omitempty"`
+func (MFASettings) TableName() string {
+    return "mfa_settings"
 }
 ```
 
-**File**: `internal/services/mfa_service.go`
+### Task 4.3: MFA Repository (GORM)
+
+**File**: `internal/repository/mfa_repository.go`
+
+```go
+package repository
+
+import (
+    "fmt"
+    "gorm.io/gorm"
+    "github.com/yourusername/iam-authorization-service/internal/models"
+)
+
+type MFARepository struct {
+    db *gorm.DB
+}
+
+func NewMFARepository(db *gorm.DB) *MFARepository {
+    return &MFARepository{db: db}
+}
+
+// Create inserts MFA settings
+func (r *MFARepository) Create(mfa *models.MFASettings) error {
+    return r.db.Create(mfa).Error
+}
+
+// GetByUserID retrieves MFA settings for user
+func (r *MFARepository) GetByUserID(userID string) (*models.MFASettings, error) {
+    var mfa models.MFASettings
+    if err := r.db.Where("user_id = ?", userID).First(&mfa).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, fmt.Errorf("MFA settings not found")
+        }
+        return nil, err
+    }
+    return &mfa, nil
+}
+
+// Update updates MFA settings
+func (r *MFARepository) Update(mfa *models.MFASettings) error {
+    return r.db.Save(mfa).Error
+}
+
+// Delete removes MFA settings (disable MFA)
+func (r *MFARepository) Delete(userID string) error {
+    return r.db.Where("user_id = ?", userID).Delete(&models.MFASettings{}).Error
+}
+```
+
+---
+
+## PHASE 5: OAUTH 2.0 & SOCIAL LOGIN
+
+### Task 5.1: OAuth Client Management
+
+**Migration 000013**: `create_oauth_clients_table.up.sql`
+
+```sql
+CREATE TABLE oauth_clients (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    client_id VARCHAR(255) UNIQUE NOT NULL,
+    client_secret VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    redirect_uris JSONB NOT NULL,
+    grant_types JSONB NOT NULL,
+    scopes JSONB,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_oauth_clients_client_id ON oauth_clients(client_id);
+CREATE INDEX idx_oauth_clients_tenant ON oauth_clients(tenant_id);
+```
+
+### Task 5.2: OAuth GORM Models
+
+**File**: `internal/models/oauth.go`
+
+```go
+package models
+
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+    "gorm.io/datatypes"
+)
+
+type OAuthClient struct {
+    ID           string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    ClientID     string         `gorm:"type:varchar(255);uniqueIndex;not null" json:"client_id"`
+    ClientSecret string         `gorm:"type:varchar(255);not null" json:"-"`
+    Name         string         `gorm:"type:varchar(255);not null" json:"name"`
+    TenantID     string         `gorm:"type:uuid;index" json:"tenant_id"`
+    RedirectURIs datatypes.JSON `gorm:"type:jsonb;not null" json:"redirect_uris"`
+    GrantTypes   datatypes.JSON `gorm:"type:jsonb;not null" json:"grant_types"`
+    Scopes       datatypes.JSON `gorm:"type:jsonb" json:"scopes"`
+    IsActive     bool           `gorm:"default:true" json:"is_active"`
+    CreatedAt    time.Time      `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt    time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+
+    // Association
+    Tenant Tenant `gorm:"foreignKey:TenantID" json:"-"`
+}
+
+func (o *OAuthClient) BeforeCreate(tx *gorm.DB) error {
+    if o.ID == "" {
+        o.ID = uuid.New().String()
+    }
+    return nil
+}
+
+func (OAuthClient) TableName() string {
+    return "oauth_clients"
+}
+
+type RegisterOAuthClientRequest struct {
+    Name         string   `json:"name" binding:"required"`
+    RedirectURIs []string `json:"redirect_uris" binding:"required"`
+    GrantTypes   []string `json:"grant_types" binding:"required"`
+    Scopes       []string `json:"scopes"`
+}
+```
+
+### Task 5.3: Social Login Provider Models
+
+**File**: `internal/models/social_account.go`
+
+```go
+package models
+
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+)
+
+type SocialAccount struct {
+    ID           string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    UserID       string    `gorm:"type:uuid;not null;index" json:"user_id"`
+    Provider     string    `gorm:"type:varchar(50);not null" json:"provider"` // 'google', 'github'
+    ProviderID   string    `gorm:"type:varchar(255);not null" json:"provider_id"`
+    Email        string    `gorm:"type:varchar(255)" json:"email"`
+    AccessToken  string    `gorm:"type:text" json:"-"`
+    RefreshToken string    `gorm:"type:text" json:"-"`
+    ExpiresAt    *time.Time `gorm:"type:timestamp" json:"-"`
+    CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+
+    // Association
+    User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
+}
+
+func (s *SocialAccount) BeforeCreate(tx *gorm.DB) error {
+    if s.ID == "" {
+        s.ID = uuid.New().String()
+    }
+    return nil
+}
+
+func (SocialAccount) TableName() string {
+    return "social_accounts"
+}
+
+// Composite unique index: provider + provider_id
+func (SocialAccount) GormIndexes() []string {
+    return []string{"idx_social_accounts_provider:provider,provider_id,unique"}
+}
+```
+
+---
+
+## PHASE 6: DYNAMIC RESOURCE REGISTRATION
+
+### Task 6.1: Resource Type Management
+
+**Migration 000014**: `enhance_resource_types_table.up.sql`
+
+```sql
+-- Already created in Phase 1, now add tenant support
+ALTER TABLE resource_types ADD COLUMN tenant_id UUID REFERENCES tenants(id);
+ALTER TABLE resource_types ADD COLUMN is_system BOOLEAN DEFAULT false;
+ALTER TABLE resource_types ADD COLUMN schema JSONB;
+
+CREATE INDEX idx_resource_types_tenant ON resource_types(tenant_id);
+
+-- System resources are global (null tenant_id)
+UPDATE resource_types SET is_system = true WHERE name IN ('user', 'profile', 'task');
+```
+
+### Task 6.2: Resource Type GORM Model
+
+**File**: `internal/models/resource_type.go`
+
+```go
+package models
+
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+    "gorm.io/datatypes"
+)
+
+type ResourceType struct {
+    ID          string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    Name        string         `gorm:"type:varchar(100);not null" json:"name"`
+    Description string         `gorm:"type:text" json:"description"`
+    TenantID    *string        `gorm:"type:uuid;index" json:"tenant_id,omitempty"` // NULL for global
+    IsSystem    bool           `gorm:"default:false" json:"is_system"` // System resources
+    Schema      datatypes.JSON `gorm:"type:jsonb" json:"schema,omitempty"` // Resource attributes
+    CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt   time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+
+    // Associations
+    Tenant      *Tenant       `gorm:"foreignKey:TenantID" json:"-"`
+    Permissions []Permission  `gorm:"foreignKey:ResourceTypeID;constraint:OnDelete:CASCADE" json:"-"`
+}
+
+func (r *ResourceType) BeforeCreate(tx *gorm.DB) error {
+    if r.ID == "" {
+        r.ID = uuid.New().String()
+    }
+    return nil
+}
+
+func (ResourceType) TableName() string {
+    return "resource_types"
+}
+
+type RegisterResourceRequest struct {
+    Name        string                 `json:"name" binding:"required"`
+    Description string                 `json:"description"`
+    Actions     []string               `json:"actions" binding:"required"`
+    Schema      map[string]interface{} `json:"schema"`
+}
+```
+
+### Task 6.3: Resource Registration Service
+
+**File**: `internal/services/resource_service.go`
 
 ```go
 package services
 
 import (
+    "gorm.io/gorm"
     "github.com/yourusername/iam-authorization-service/internal/models"
     "github.com/yourusername/iam-authorization-service/internal/repository"
     "github.com/yourusername/iam-authorization-service/internal/utils"
 )
 
-type MFAService struct {
-    mfaRepo *repository.MFARepository
+type ResourceService struct {
+    resourceRepo *repository.ResourceTypeRepository
+    permRepo     *repository.PermissionRepository
+    db           *gorm.DB
 }
 
-func NewMFAService(mfaRepo *repository.MFARepository) *MFAService {
-    return &MFAService{mfaRepo: mfaRepo}
+func NewResourceService(
+    resourceRepo *repository.ResourceTypeRepository,
+    permRepo *repository.PermissionRepository,
+    db *gorm.DB,
+) *ResourceService {
+    return &ResourceService{
+        resourceRepo: resourceRepo,
+        permRepo:     permRepo,
+        db:           db,
+    }
 }
 
-// EnableMFA starts MFA setup process
-func (s *MFAService) EnableMFA(userID, email, method string) (*models.EnableMFAResponse, error) {
-    // 1. Generate TOTP secret
-    secret, qrCode, err := utils.GenerateTOTPSecret("YourApp", email)
-    if err != nil {
-        return nil, err
-    }
+// RegisterResource allows external apps to register custom resource types
+func (s *ResourceService) RegisterResource(tenantID string, req models.RegisterResourceRequest) (*models.ResourceType, error) {
+    var resourceType *models.ResourceType
 
-    // 2. Generate backup codes
-    backupCodes, err := utils.GenerateBackupCodes(10)
-    if err != nil {
-        return nil, err
-    }
-
-    // 3. Hash backup codes before storing
-    hashedBackupCodes := make([]string, len(backupCodes))
-    for i, code := range backupCodes {
-        hashed, _ := utils.HashPassword(code)
-        hashedBackupCodes[i] = hashed
-    }
-
-    // 4. Save MFA settings (not enabled yet)
-    mfaSettings := &models.MFASettings{
-        UserID:      userID,
-        MFAEnabled:  false, // Enable after verification
-        MFAMethod:   method,
-        TOTPSecret:  secret,
-        BackupCodes: hashedBackupCodes,
-    }
-
-    if err := s.mfaRepo.Create(mfaSettings); err != nil {
-        return nil, err
-    }
-
-    return &models.EnableMFAResponse{
-        Secret:      secret,
-        QRCode:      qrCode,
-        BackupCodes: backupCodes, // Return plain codes once
-    }, nil
-}
-
-// VerifyAndEnableMFA verifies initial MFA code and enables MFA
-func (s *MFAService) VerifyAndEnableMFA(userID, code string) error {
-    // 1. Get MFA settings
-    mfaSettings, err := s.mfaRepo.GetByUserID(userID)
-    if err != nil {
-        return utils.ValidationError("MFA not set up")
-    }
-
-    // 2. Validate code
-    if !utils.ValidateTOTP(mfaSettings.TOTPSecret, code) {
-        return utils.ValidationError("invalid MFA code")
-    }
-
-    // 3. Enable MFA
-    mfaSettings.MFAEnabled = true
-    return s.mfaRepo.Update(mfaSettings)
-}
-
-// ValidateMFACode validates MFA code during login
-func (s *MFAService) ValidateMFACode(userID, code string) (bool, error) {
-    mfaSettings, err := s.mfaRepo.GetByUserID(userID)
-    if err != nil || !mfaSettings.MFAEnabled {
-        return false, nil
-    }
-
-    // Check TOTP code
-    if utils.ValidateTOTP(mfaSettings.TOTPSecret, code) {
-        return true, nil
-    }
-
-    // Check backup codes
-    for i, hashedCode := range mfaSettings.BackupCodes {
-        if utils.ComparePassword(hashedCode, code) == nil {
-            // Remove used backup code
-            mfaSettings.BackupCodes = append(mfaSettings.BackupCodes[:i], mfaSettings.BackupCodes[i+1:]...)
-            s.mfaRepo.Update(mfaSettings)
-            return true, nil
+    // Use GORM transaction
+    err := s.db.Transaction(func(tx *gorm.DB) error {
+        // 1. Create resource type
+        resourceType = &models.ResourceType{
+            Name:        req.Name,
+            Description: req.Description,
+            TenantID:    &tenantID,
+            IsSystem:    false,
         }
-    }
+        if err := tx.Create(resourceType).Error; err != nil {
+            return utils.InternalServerError("failed to create resource type")
+        }
 
-    return false, nil
-}
+        // 2. Create permissions for each action
+        for _, action := range req.Actions {
+            permission := &models.Permission{
+                Resource:    req.Name,
+                Action:      action,
+                Description: fmt.Sprintf("%s action on %s", action, req.Name),
+                TenantID:    &tenantID,
+            }
+            if err := tx.Create(permission).Error; err != nil {
+                return err
+            }
+        }
 
-// DisableMFA disables MFA for user
-func (s *MFAService) DisableMFA(userID string) error {
-    return s.mfaRepo.Delete(userID)
+        return nil
+    })
+
+    return resourceType, err
 }
 ```
 
-### Task 3.2: Update Login Flow for MFA
+---
 
-**File**: `internal/services/auth_service.go` (enhance Login method)
+## PHASE 7: SDK DEVELOPMENT
+
+### Task 7.1: Go SDK Client
+
+**File**: `pkg/iamsdk/client.go`
 
 ```go
-// Login with MFA support
-func (s *AuthService) Login(email, password, mfaCode string) (*models.TokenPair, bool, error) {
-    // 1. Validate credentials
-    user, err := s.userRepo.GetByEmail(email)
+package iamsdk
+
+import (
+    "bytes"
+    "encoding/json"
+    "fmt"
+    "net/http"
+    "time"
+)
+
+type Client struct {
+    baseURL    string
+    apiKey     string
+    tenantID   string
+    httpClient *http.Client
+}
+
+type Config struct {
+    BaseURL  string
+    APIKey   string
+    TenantID string
+    Timeout  time.Duration
+}
+
+func NewClient(config Config) *Client {
+    if config.Timeout == 0 {
+        config.Timeout = 10 * time.Second
+    }
+
+    return &Client{
+        baseURL:  config.BaseURL,
+        apiKey:   config.APIKey,
+        tenantID: config.TenantID,
+        httpClient: &http.Client{
+            Timeout: config.Timeout,
+        },
+    }
+}
+
+// doRequest makes HTTP request with authentication
+func (c *Client) doRequest(method, path string, body interface{}, result interface{}) error {
+    var reqBody *bytes.Buffer
+    if body != nil {
+        jsonData, err := json.Marshal(body)
+        if err != nil {
+            return err
+        }
+        reqBody = bytes.NewBuffer(jsonData)
+    } else {
+        reqBody = bytes.NewBuffer(nil)
+    }
+
+    req, err := http.NewRequest(method, c.baseURL+path, reqBody)
     if err != nil {
-        return nil, false, utils.UnauthorizedError("invalid credentials")
+        return err
     }
 
-    if err := utils.ComparePassword(user.PasswordHash, password); err != nil {
-        return nil, false, utils.UnauthorizedError("invalid credentials")
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Authorization", "Bearer "+c.apiKey)
+    req.Header.Set("X-Tenant-ID", c.tenantID)
+
+    resp, err := c.httpClient.Do(req)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode >= 400 {
+        var errResp map[string]interface{}
+        json.NewDecoder(resp.Body).Decode(&errResp)
+        return fmt.Errorf("API error %d: %v", resp.StatusCode, errResp["error"])
     }
 
-    // 2. Check if MFA is enabled
-    mfaSettings, err := s.mfaRepo.GetByUserID(user.ID)
-    if err == nil && mfaSettings.MFAEnabled {
-        // MFA is enabled
-        if mfaCode == "" {
-            // Return special response indicating MFA required
-            return nil, true, nil // true = MFA required
-        }
-
-        // Validate MFA code
-        valid, err := s.mfaService.ValidateMFACode(user.ID, mfaCode)
-        if err != nil || !valid {
-            return nil, false, utils.UnauthorizedError("invalid MFA code")
-        }
+    if result != nil {
+        return json.NewDecoder(resp.Body).Decode(result)
     }
 
-    // 3. Generate tokens (same as Phase 1)
-    // ...
+    return nil
+}
+```
+
+**File**: `pkg/iamsdk/auth.go`
+
+```go
+package iamsdk
+
+type LoginRequest struct {
+    Email    string `json:"email"`
+    Password string `json:"password"`
+    MFACode  string `json:"mfa_code,omitempty"`
+}
+
+type LoginResponse struct {
+    AccessToken  string `json:"access_token"`
+    RefreshToken string `json:"refresh_token"`
+    ExpiresIn    int    `json:"expires_in"`
+    MFARequired  bool   `json:"mfa_required"`
+}
+
+// Login authenticates a user
+func (c *Client) Login(email, password string) (*LoginResponse, error) {
+    req := LoginRequest{
+        Email:    email,
+        Password: password,
+    }
+
+    var resp LoginResponse
+    err := c.doRequest("POST", "/v1/auth/login", req, &resp)
+    return &resp, err
+}
+
+// Register creates a new user
+func (c *Client) Register(email, password string) error {
+    req := map[string]string{
+        "email":    email,
+        "password": password,
+    }
+    return c.doRequest("POST", "/v1/auth/register", req, nil)
+}
+```
+
+**File**: `pkg/iamsdk/authz.go`
+
+```go
+package iamsdk
+
+type CheckPermissionRequest struct {
+    UserID     string                 `json:"user_id"`
+    Resource   string                 `json:"resource"`
+    Action     string                 `json:"action"`
+    ResourceID string                 `json:"resource_id,omitempty"`
+    Context    map[string]interface{} `json:"context,omitempty"`
+}
+
+type CheckPermissionResponse struct {
+    Allowed bool   `json:"allowed"`
+    Reason  string `json:"reason,omitempty"`
+}
+
+// Can checks if user has permission
+func (c *Client) Can(userID, permission, resourceID string) (bool, error) {
+    parts := strings.Split(permission, ":")
+    if len(parts) != 2 {
+        return false, fmt.Errorf("permission format should be resource:action")
+    }
+
+    req := CheckPermissionRequest{
+        UserID:     userID,
+        Resource:   parts[0],
+        Action:     parts[1],
+        ResourceID: resourceID,
+    }
+
+    var resp CheckPermissionResponse
+    err := c.doRequest("POST", "/v1/authz/check", req, &resp)
+    if err != nil {
+        return false, err
+    }
+
+    return resp.Allowed, nil
 }
 ```
 
 ---
 
-*Due to length constraints, the plan continues with remaining phases...*
+## PHASE 8: ADVANCED FEATURES
+
+### Task 8.1: Session Management with Redis
+
+**File**: `internal/models/session.go`
+
+```go
+package models
+
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+)
+
+type Session struct {
+    ID        string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    UserID    string    `gorm:"type:uuid;not null;index" json:"user_id"`
+    Token     string    `gorm:"type:varchar(500);uniqueIndex;not null" json:"token"`
+    IPAddress string    `gorm:"type:varchar(45)" json:"ip_address"`
+    UserAgent string    `gorm:"type:text" json:"user_agent"`
+    ExpiresAt time.Time `gorm:"not null" json:"expires_at"`
+    CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+    LastUsedAt time.Time `gorm:"autoUpdateTime" json:"last_used_at"`
+
+    // Association
+    User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
+}
+
+func (s *Session) BeforeCreate(tx *gorm.DB) error {
+    if s.ID == "" {
+        s.ID = uuid.New().String()
+    }
+    return nil
+}
+
+func (Session) TableName() string {
+    return "sessions"
+}
+```
+
+### Task 8.2: Audit Logging
+
+**Migration 000015**: `create_audit_logs_table.up.sql`
+
+```sql
+CREATE TABLE audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES users(id),
+    action VARCHAR(100) NOT NULL,
+    resource_type VARCHAR(50),
+    resource_id UUID,
+    decision VARCHAR(10),
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    context JSONB,
+    timestamp TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_logs_tenant ON audit_logs(tenant_id);
+CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
+CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
+CREATE INDEX idx_audit_logs_resource ON audit_logs(resource_type, resource_id);
+```
+
+**File**: `internal/models/audit.go`
+
+```go
+package models
+
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+    "gorm.io/datatypes"
+)
+
+type AuditLog struct {
+    ID           string         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    TenantID     string         `gorm:"type:uuid;index" json:"tenant_id"`
+    UserID       *string        `gorm:"type:uuid;index" json:"user_id,omitempty"`
+    Action       string         `gorm:"type:varchar(100);not null" json:"action"`
+    ResourceType string         `gorm:"type:varchar(50);index" json:"resource_type,omitempty"`
+    ResourceID   *string        `gorm:"type:uuid;index" json:"resource_id,omitempty"`
+    Decision     string         `gorm:"type:varchar(10)" json:"decision,omitempty"` // allow/deny
+    IPAddress    string         `gorm:"type:varchar(45)" json:"ip_address,omitempty"`
+    UserAgent    string         `gorm:"type:text" json:"user_agent,omitempty"`
+    Context      datatypes.JSON `gorm:"type:jsonb" json:"context,omitempty"`
+    Timestamp    time.Time      `gorm:"autoCreateTime;index" json:"timestamp"`
+
+    // Associations
+    Tenant *Tenant `gorm:"foreignKey:TenantID" json:"-"`
+    User   *User   `gorm:"foreignKey:UserID" json:"-"`
+}
+
+func (a *AuditLog) BeforeCreate(tx *gorm.DB) error {
+    if a.ID == "" {
+        a.ID = uuid.New().String()
+    }
+    return nil
+}
+
+func (AuditLog) TableName() string {
+    return "audit_logs"
+}
+```
 
 ---
 
-## REMAINING PHASES OVERVIEW
+## PHASE 9: MIGRATION FROM PHASE 1
 
-### PHASE 4: OAUTH 2.0 SERVER IMPLEMENTATION
-- Authorization Code Flow
-- Client Credentials Flow  
-- Token Exchange
-- OAuth client registration
-- Consent screens
+### Task 9.1: Data Migration Script
 
-### PHASE 5: SOCIAL LOGIN INTEGRATION
-- Google OAuth integration
-- GitHub OAuth integration
-- Provider abstraction layer
-- Account linking
+**File**: `scripts/migrate_to_phase2.go`
 
-### PHASE 6: DYNAMIC RESOURCE REGISTRATION
-- External apps can register resources
-- Resource type management
-- Action definitions
-- Permission templates
+```go
+package main
 
-### PHASE 7: SDK DEVELOPMENT
-- Go SDK
-- Node.js SDK
-- Python SDK
-- Usage examples
+import (
+    "log"
+    "gorm.io/gorm"
+    "github.com/yourusername/iam-authorization-service/config"
+    "github.com/yourusername/iam-authorization-service/internal/database"
+    "github.com/yourusername/iam-authorization-service/internal/models"
+)
 
-### PHASE 8: ADVANCED FEATURES
-- Session management
-- Device tracking
-- Rate limiting
-- Audit logging
-- Webhooks
-- Admin dashboard (optional)
+func main() {
+    // Load config
+    cfg, _ := config.Load()
 
-### PHASE 9: MIGRATION & TESTING
-- Migration path from Phase 1
-- Data migration scripts
-- Integration tests
-- Load testing
-- Documentation
+    // Connect to database
+    db, _ := database.NewPostgres(cfg.Database)
+
+    // Run migrations 000008-000015
+    log.Println("Running Phase 2 migrations...")
+
+    // Create default tenant if not exists
+    var count int64
+    db.Model(&models.Tenant{}).Count(&count)
+    if count == 0 {
+        defaultTenant := &models.Tenant{
+            Name:      "Default Organization",
+            Subdomain: "default",
+            Status:    "active",
+            Plan:      "free",
+        }
+        db.Create(defaultTenant)
+
+        // Assign all existing users to default tenant
+        db.Model(&models.User{}).Where("tenant_id IS NULL").
+            Update("tenant_id", defaultTenant.ID)
+
+        // Assign all existing roles to default tenant
+        db.Model(&models.Role{}).Where("tenant_id IS NULL").
+            Update("tenant_id", defaultTenant.ID)
+
+        log.Println("Default tenant created and data migrated")
+    }
+
+    log.Println("Migration complete")
+}
+```
+
+---
+
+## GORM-SPECIFIC IMPLEMENTATION PATTERNS
+
+### Pattern 1: Tenant-Scoped Queries
+
+```go
+// Use GORM scopes for automatic tenant filtering
+func (r *UserRepository) GetAllByTenant(tenantID string) ([]models.User, error) {
+    var users []models.User
+    err := r.db.Scopes(TenantScope(tenantID)).
+        Order("created_at DESC").
+        Find(&users).Error
+    return users, err
+}
+
+// Scope definition
+func TenantScope(tenantID string) func(*gorm.DB) *gorm.DB {
+    return func(db *gorm.DB) *gorm.DB {
+        return db.Where("tenant_id = ?", tenantID)
+    }
+}
+```
+
+### Pattern 2: Complex Associations with Preload
+
+```go
+// Load user with all associations
+func (r *UserRepository) GetWithAssociations(userID string) (*models.User, error) {
+    var user models.User
+    err := r.db.
+        Preload("Tenant").
+        Preload("Roles").
+        Preload("Roles.Permissions").
+        Preload("MFASettings").
+        First(&user, "id = ?", userID).Error
+    return &user, err
+}
+```
+
+### Pattern 3: GORM Transactions for Complex Operations
+
+```go
+// Example: Create tenant with all setup in one transaction
+err := db.Transaction(func(tx *gorm.DB) error {
+    // Create tenant
+    if err := tx.Create(&tenant).Error; err != nil {
+        return err
+    }
+
+    // Create admin user
+    if err := tx.Create(&adminUser).Error; err != nil {
+        return err
+    }
+
+    // Create roles
+    if err := tx.Create(&roles).Error; err != nil {
+        return err
+    }
+
+    // All operations committed together, or rolled back on any error
+    return nil
+})
+```
+
+### Pattern 4: Dynamic Updates with GORM
+
+```go
+// Update only non-nil fields
+func (r *UserRepository) UpdatePartial(userID string, updates map[string]interface{}) error {
+    return r.db.Model(&models.User{}).
+        Where("id = ?", userID).
+        Updates(updates).Error
+}
+```
 
 ---
 
 ## DEVELOPMENT TIMELINE (6-8 WEEKS)
 
 ### Weeks 1-2: Multi-Tenant Foundation
-- Multi-tenant database schema
-- Tenant management
-- Tenant isolation middleware
-- Migration from Phase 1
+
+- [ ] Run migrations 000008-000009 (tenant tables)
+- [ ] Implement Tenant GORM model and repository
+- [ ] Implement Tenant service with GORM transactions
+- [ ] Add tenant middleware
+- [ ] Create GORM scopes for tenant isolation
+- [ ] Migrate Phase 1 data to default tenant
+- [ ] Test tenant isolation with GORM queries
 
 ### Weeks 3-4: Enhanced Authentication
-- Email verification
-- Password reset
-- Email service integration
-- MFA (TOTP + backup codes)
+
+- [ ] Run migrations 000010-000012
+- [ ] Implement Email Verification (GORM models, repositories, services)
+- [ ] Implement Password Reset (GORM models, repositories, services)
+- [ ] Integrate email service (SendGrid/SES)
+- [ ] Implement MFA (TOTP with GORM storage)
+- [ ] Update login flow for MFA
+- [ ] Test all authentication flows
 
 ### Weeks 5-6: OAuth & Social Login
-- OAuth 2.0 server
-- Google/GitHub integration
-- Account linking
 
-### Weeks 7-8: Platform Features & Polish
-- Dynamic resource registration
-- SDK development
-- Advanced features (webhooks, audit, etc.)
-- Documentation
-- Example applications
+- [ ] Run migration 000013 (OAuth clients)
+- [ ] Implement OAuth 2.0 server
+- [ ] Implement Social Account GORM model
+- [ ] Integrate Google OAuth
+- [ ] Integrate GitHub OAuth
+- [ ] Implement account linking with GORM associations
+- [ ] Test OAuth flows
+
+### Weeks 7-8: Platform Features & SDK
+
+- [ ] Run migration 000014-000015
+- [ ] Implement dynamic resource registration (GORM)
+- [ ] Implement audit logging (GORM)
+- [ ] Implement session management
+- [ ] Develop Go SDK
+- [ ] Develop Node.js SDK
+- [ ] Create example applications
+- [ ] Write comprehensive documentation
 
 ---
 
 ## CRITICAL SUCCESS CRITERIA
 
-### Multi-Tenancy
-- [ ] Complete tenant isolation
-- [ ] Multiple tenants can coexist
-- [ ] Each tenant has own users/roles/permissions
-- [ ] Subdomain-based tenant resolution
+### Multi-Tenancy with GORM
+
+- [ ] Tenant GORM model with proper associations
+- [ ] All repositories use GORM tenant scopes
+- [ ] Multiple tenants can coexist with data isolation
+- [ ] Subdomain-based tenant resolution works
 
 ### Self-Hosted Authentication
-- [ ] Email verification working
-- [ ] Password reset flows complete
-- [ ] MFA (TOTP) functional
+
+- [ ] Email verification using GORM models
+- [ ] Password reset using GORM models
+- [ ] MFA (TOTP) with GORM storage
 - [ ] No dependency on external auth providers
+- [ ] All auth data managed with GORM
 
 ### OAuth 2.0
-- [ ] Authorization code flow implemented
-- [ ] Client credentials flow implemented
+
+- [ ] OAuth clients stored in GORM
+- [ ] Authorization code flow working
 - [ ] Token exchange working
-- [ ] OAuth clients can register
 
 ### Social Login
+
+- [ ] Social accounts linked using GORM associations
 - [ ] Google login integration
 - [ ] GitHub login integration
-- [ ] Account linking works
 
 ### Dynamic Resources
-- [ ] External apps can register resources
-- [ ] Permissions work for custom resources
-- [ ] Multi-tenant resource isolation
+
+- [ ] External apps can register resources via API
+- [ ] Resource types stored with GORM
+- [ ] Permissions created dynamically with GORM
 
 ### SDK & Integration
+
 - [ ] Go SDK functional
 - [ ] Node.js SDK functional
 - [ ] Example apps demonstrate usage
-- [ ] Clear documentation
-
-### Security
-- [ ] All authentication self-hosted
-- [ ] Tenant data isolated
-- [ ] MFA enforced for admins
-- [ ] Audit logging complete
-- [ ] Rate limiting implemented
 
 ---
 
-## KEY DIFFERENCES FROM PHASE 1
+## KEY GORM ADVANTAGES FOR PHASE 2
 
-| Aspect | Phase 1 (Taskify) | Phase 2 (IAM Platform) |
-|--------|-------------------|------------------------|
-| Authentication | Basic email/password + JWT | Full suite: OAuth, MFA, social login, email verification |
-| Authorization | RBAC/ABAC for tasks | RBAC/ABAC for any resource type |
-| Tenancy | Single tenant | Multi-tenant with isolation |
-| External Deps | None | Email service (SendGrid/SES) |
-| Use Case | Task management | Platform for any application |
-| Scope | Learning project | Production-ready IAM service |
-| Deployment | Single app | Service + SDKs |
+1. **Automatic SQL Injection Prevention**: All GORM methods use parameterized queries
+2. **Association Management**: Easy many-to-many, foreign keys, preloading
+3. **Transaction Support**: Built-in `db.Transaction()` for complex operations
+4. **Scopes**: Reusable tenant filtering logic
+5. **Hooks**: Automatic UUID generation, timestamps
+6. **Type Safety**: Compile-time checking
+7. **Migration**: Can use AutoMigrate + golang-migrate
+8. **JSON Fields**: Easy JSONB support with datatypes.JSON
+9. **Query Building**: Chainable methods for complex queries
+10. **Multi-Tenant**: Scopes make tenant isolation clean and DRY
+
+---
+
+## DEPENDENCIES FOR PHASE 2
+
+```go
+// go.mod (additions to Phase 1)
+require (
+    // Phase 1 dependencies
+    gorm.io/gorm v1.25.5
+    gorm.io/driver/postgres v1.5.4
+    github.com/gin-gonic/gin v1.9.1
+    github.com/golang-jwt/jwt/v5 v5.2.0
+    golang.org/x/crypto v0.17.0
+    github.com/google/uuid v1.6.0
+
+    // Phase 2 additions
+    gorm.io/datatypes v1.2.0              // For JSONB support
+    github.com/sendgrid/sendgrid-go v3.14.0 // Email delivery
+    github.com/pquerna/otp v1.4.0          // TOTP for MFA
+    github.com/skip2/go-qrcode v0.0.0      // QR codes for MFA
+    golang.org/x/oauth2 v0.15.0            // OAuth 2.0
+    github.com/go-redis/redis/v8 v8.11.5   // Sessions & rate limiting
+)
+```
 
 ---
 
 ## MIGRATION PATH FROM PHASE 1
 
-### Step 1: Add Multi-Tenancy (No Breaking Changes)
+### Step 1: Add Multi-Tenancy (Non-Breaking)
+
 - Run migrations 000008-000009
-- Create default tenant
-- Migrate existing data to default tenant
+- All Phase 1 GORM models enhanced with tenant_id
+- Create default tenant with GORM
+- Migrate existing data to default tenant using GORM updates
 - Phase 1 functionality still works
 
-### Step 2: Add Enhanced Auth Features
-- Email verification (optional for existing users)
-- Password reset (new feature)
-- MFA (opt-in for users)
+### Step 2: Add Enhanced Auth (Additive)
+
+- Run migrations 000010-000012
+- New GORM models (EmailVerification, PasswordReset, MFASettings)
+- New repositories using GORM
 - Phase 1 login still works
 
-### Step 3: Expose New APIs
-- OAuth endpoints (new)
-- Resource registration (new)
-- Tenant management (new)
-- Phase 1 APIs unchanged
+### Step 3: Add Platform Features
 
-### Step 4: Optional: Migrate Taskify to Client
-- Move task management to separate app
-- Use IAM service for authentication/authorization
-- Demonstrate platform capabilities
+- OAuth clients (GORM models)
+- Social accounts (GORM associations)
+- Resource registration (GORM)
+- All new features, no breaking changes
 
 ---
 
-## RESOURCES & TOOLS
+## EXAMPLE GORM USAGE IN PHASE 2
 
-### Dependencies to Add
+### Example 1: Create Tenant with Full Setup (Transaction)
+
 ```go
-// go.mod additions
-require (
-    github.com/sendgrid/sendgrid-go v3.14.0
-    github.com/pquerna/otp v1.4.0
-    golang.org/x/oauth2 v0.15.0
-    github.com/go-redis/redis/v8 v8.11.5  // For rate limiting
-)
+func (s *TenantService) CreateTenantWithSetup(req CreateTenantRequest) (*models.Tenant, error) {
+    var tenant *models.Tenant
+
+    err := s.db.Transaction(func(tx *gorm.DB) error {
+        // Create tenant
+        tenant = &models.Tenant{
+            Name: req.Name,
+            Subdomain: req.Subdomain,
+        }
+        if err := tx.Create(tenant).Error; err != nil {
+            return err
+        }
+
+        // Create admin user (uses BeforeCreate hook for UUID)
+        admin := &models.User{
+            Email: req.AdminEmail,
+            PasswordHash: hashedPassword,
+            TenantID: tenant.ID,
+            EmailVerified: true,
+        }
+        if err := tx.Create(admin).Error; err != nil {
+            return err
+        }
+
+        // Create roles for tenant
+        roles := []models.Role{
+            {Name: "user", TenantID: tenant.ID},
+            {Name: "admin", TenantID: tenant.ID},
+        }
+        if err := tx.Create(&roles).Error; err != nil {
+            return err
+        }
+
+        // Assign admin role (many-to-many association)
+        if err := tx.Model(&admin).Association("Roles").Append(&roles[1]); err != nil {
+            return err
+        }
+
+        return nil
+    })
+
+    return tenant, err
+}
 ```
 
-### External Services
-- **Email**: SendGrid or AWS SES
-- **Redis**: Session storage, rate limiting
-- **PostgreSQL**: Main database (same as Phase 1)
+### Example 2: Multi-Tenant Query with Preload
 
-### Documentation
-- OAuth 2.0 RFC: https://datatracker.ietf.org/doc/html/rfc6749
-- TOTP RFC: https://datatracker.ietf.org/doc/html/rfc6238
-- OpenID Connect: https://openid.net/connect/
-- Multi-tenancy patterns: https://learn.microsoft.com/en-us/azure/architecture/guide/multitenant/overview
+```go
+func (r *UserRepository) GetUserWithRolesAndPermissions(userID, tenantID string) (*models.User, error) {
+    var user models.User
+    err := r.db.
+        Scopes(TenantScope(tenantID)).
+        Preload("Roles").
+        Preload("Roles.Permissions").
+        Preload("MFASettings").
+        First(&user, "id = ?", userID).Error
+    return &user, err
+}
+```
 
 ---
 
-*End of Phase 2 Implementation Plan*
+## RESOURCES & DOCUMENTATION
 
-**Note**: This is a high-level roadmap. Each phase will require detailed implementation with specific code for repositories, services, handlers, and tests. The key principle is building all authentication features in-house without relying on external auth providers, while maintaining the strong authorization foundation from Phase 1.
+- **GORM Documentation**: https://gorm.io/docs/
+- **GORM Associations**: https://gorm.io/docs/associations.html
+- **GORM Scopes**: https://gorm.io/docs/scopes.html
+- **GORM Transactions**: https://gorm.io/docs/transactions.html
+- **GORM Datatypes**: https://github.com/go-gorm/datatypes
+- **OAuth 2.0 RFC**: https://datatracker.ietf.org/doc/html/rfc6749
+- **TOTP RFC**: https://datatracker.ietf.org/doc/html/rfc6238
+- **Multi-Tenancy**: https://learn.microsoft.com/en-us/azure/architecture/guide/multitenant/overview
 
+---
+
+_End of Phase 2 Implementation Plan with GORM_
+
+**Note**: All database operations use GORM ORM for SQL injection prevention, type safety, and clean code. The service remains self-hosted without external auth provider dependencies.

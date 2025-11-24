@@ -84,7 +84,7 @@ iam-authorization-service/
 
 **File**: `go.mod`
 
-Update module name and add required dependencies:
+Update module name and add required dependencies (including GORM):
 
 ```go
 module github.com/yourusername/iam-authorization-service
@@ -93,10 +93,11 @@ go 1.21
 
 require (
     github.com/gin-gonic/gin v1.9.1
-    github.com/lib/pq v1.10.9
+    gorm.io/gorm v1.25.5
+    gorm.io/driver/postgres v1.5.4
     github.com/golang-jwt/jwt/v5 v5.2.0
     golang.org/x/crypto v0.17.0
-    github.com/google/uuid v1.5.0
+    github.com/google/uuid v1.6.0
     gopkg.in/yaml.v3 v3.0.1
     github.com/golang-migrate/migrate/v4 v4.17.0
 )
@@ -226,7 +227,7 @@ ENV=development
 
 ## PHASE 2: DATABASE SETUP & MIGRATIONS
 
-### Task 2.1: Database Connection
+### Task 2.1: Database Connection with GORM
 
 **File**: `internal/database/postgres.go`
 
@@ -234,35 +235,66 @@ ENV=development
 package database
 
 import (
-    "database/sql"
     "fmt"
-    _ "github.com/lib/pq"
+    "log"
+
+    "gorm.io/driver/postgres"
+    "gorm.io/gorm"
+    "gorm.io/gorm/logger"
     "github.com/yourusername/iam-authorization-service/config"
+    "github.com/yourusername/iam-authorization-service/internal/models"
 )
 
-func NewPostgres(cfg config.DatabaseConfig) (*sql.DB, error) {
-    connStr := fmt.Sprintf(
+func NewPostgres(cfg config.DatabaseConfig) (*gorm.DB, error) {
+    dsn := fmt.Sprintf(
         "host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
         cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode,
     )
 
-    db, err := sql.Open("postgres", connStr)
-    if err != nil {
-        return nil, fmt.Errorf("failed to open database: %w", err)
+    // GORM logger configuration
+    gormConfig := &gorm.Config{
+        Logger: logger.Default.LogMode(logger.Info),
     }
 
-    // Test connection
-    if err := db.Ping(); err != nil {
-        return nil, fmt.Errorf("failed to ping database: %w", err)
+    db, err := gorm.Open(postgres.Open(dsn), gormConfig)
+    if err != nil {
+        return nil, fmt.Errorf("failed to connect to database: %w", err)
+    }
+
+    // Get underlying SQL database for connection pool settings
+    sqlDB, err := db.DB()
+    if err != nil {
+        return nil, fmt.Errorf("failed to get underlying database: %w", err)
     }
 
     // Set connection pool settings
-    db.SetMaxOpenConns(25)
-    db.SetMaxIdleConns(5)
+    sqlDB.SetMaxOpenConns(25)
+    sqlDB.SetMaxIdleConns(5)
 
+    // Test connection
+    if err := sqlDB.Ping(); err != nil {
+        return nil, fmt.Errorf("failed to ping database: %w", err)
+    }
+
+    log.Println("Database connected successfully")
     return db, nil
 }
+
+// AutoMigrate runs GORM auto-migration (optional, for development)
+func AutoMigrate(db *gorm.DB) error {
+    return db.AutoMigrate(
+        &models.User{},
+        &models.Token{},
+        &models.Role{},
+        &models.Permission{},
+        &models.UserRole{},
+        &models.RolePermission{},
+        &models.Task{},
+    )
+}
 ```
+
+**Note**: We'll use golang-migrate for production migrations, but GORM's AutoMigrate can be useful for development.
 
 ### Task 2.2: Migration 000001 - Users Table
 
@@ -684,24 +716,46 @@ func InternalServerError(message string) *APIError {
 ```go
 package models
 
-import "time"
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+)
 
 type User struct {
-    ID           string    `json:"id"`
-    Email        string    `json:"email"`
-    PasswordHash string    `json:"-"` // Never expose in JSON
-    IsActive     bool      `json:"is_active"`
-    CreatedAt    time.Time `json:"created_at"`
-    UpdatedAt    time.Time `json:"updated_at"`
+    ID           string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    Email        string    `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
+    PasswordHash string    `gorm:"type:varchar(255);not null" json:"-"` // Never expose in JSON
+    IsActive     bool      `gorm:"default:true" json:"is_active"`
+    CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+    
+    // Associations
+    Tokens []Token `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
+    Roles  []Role  `gorm:"many2many:user_roles;" json:"-"`
+    Tasks  []Task  `gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE" json:"-"`
+}
+
+// BeforeCreate GORM hook to generate UUID
+func (u *User) BeforeCreate(tx *gorm.DB) error {
+    if u.ID == "" {
+        u.ID = uuid.New().String()
+    }
+    return nil
+}
+
+// TableName specifies table name
+func (User) TableName() string {
+    return "users"
 }
 
 type RegisterRequest struct {
-    Email    string `json:"email" binding:"required"`
-    Password string `json:"password" binding:"required"`
+    Email    string `json:"email" binding:"required,email"`
+    Password string `json:"password" binding:"required,min=8"`
 }
 
 type LoginRequest struct {
-    Email    string `json:"email" binding:"required"`
+    Email    string `json:"email" binding:"required,email"`
     Password string `json:"password" binding:"required"`
 }
 
@@ -717,15 +771,35 @@ type LoginResponse struct {
 ```go
 package models
 
-import "time"
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+)
 
 type Token struct {
-    ID           string    `json:"id"`
-    UserID       string    `json:"user_id"`
-    RefreshToken string    `json:"refresh_token"`
-    ExpiresAt    time.Time `json:"expires_at"`
-    CreatedAt    time.Time `json:"created_at"`
-    Revoked      bool      `json:"revoked"`
+    ID           string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    UserID       string    `gorm:"type:uuid;not null;index" json:"user_id"`
+    RefreshToken string    `gorm:"type:varchar(500);uniqueIndex;not null" json:"refresh_token"`
+    ExpiresAt    time.Time `gorm:"not null" json:"expires_at"`
+    CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
+    Revoked      bool      `gorm:"default:false" json:"revoked"`
+    
+    // Association
+    User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
+}
+
+// BeforeCreate GORM hook
+func (t *Token) BeforeCreate(tx *gorm.DB) error {
+    if t.ID == "" {
+        t.ID = uuid.New().String()
+    }
+    return nil
+}
+
+// TableName specifies table name
+func (Token) TableName() string {
+    return "tokens"
 }
 
 type TokenPair struct {
@@ -744,13 +818,46 @@ type RefreshTokenRequest struct {
 ```go
 package models
 
-import "time"
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+)
 
 type Role struct {
-    ID          string    `json:"id"`
-    Name        string    `json:"name"`
-    Description string    `json:"description"`
-    CreatedAt   time.Time `json:"created_at"`
+    ID          string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    Name        string    `gorm:"type:varchar(50);uniqueIndex;not null" json:"name"`
+    Description string    `gorm:"type:text" json:"description"`
+    CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
+    
+    // Associations
+    Users       []User       `gorm:"many2many:user_roles;" json:"-"`
+    Permissions []Permission `gorm:"many2many:role_permissions;" json:"-"`
+}
+
+// BeforeCreate GORM hook
+func (r *Role) BeforeCreate(tx *gorm.DB) error {
+    if r.ID == "" {
+        r.ID = uuid.New().String()
+    }
+    return nil
+}
+
+// TableName specifies table name
+func (Role) TableName() string {
+    return "roles"
+}
+
+// UserRole join table model
+type UserRole struct {
+    UserID     string    `gorm:"type:uuid;primaryKey" json:"user_id"`
+    RoleID     string    `gorm:"type:uuid;primaryKey" json:"role_id"`
+    AssignedAt time.Time `gorm:"autoCreateTime" json:"assigned_at"`
+}
+
+// TableName specifies table name
+func (UserRole) TableName() string {
+    return "user_roles"
 }
 ```
 
@@ -759,14 +866,46 @@ type Role struct {
 ```go
 package models
 
-import "time"
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+)
 
 type Permission struct {
-    ID          string    `json:"id"`
-    Resource    string    `json:"resource"`
-    Action      string    `json:"action"`
-    Description string    `json:"description"`
-    CreatedAt   time.Time `json:"created_at"`
+    ID          string    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    Resource    string    `gorm:"type:varchar(50);not null" json:"resource"`
+    Action      string    `gorm:"type:varchar(50);not null" json:"action"`
+    Description string    `gorm:"type:text" json:"description"`
+    CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
+    
+    // Associations
+    Roles []Role `gorm:"many2many:role_permissions;" json:"-"`
+}
+
+// BeforeCreate GORM hook
+func (p *Permission) BeforeCreate(tx *gorm.DB) error {
+    if p.ID == "" {
+        p.ID = uuid.New().String()
+    }
+    return nil
+}
+
+// TableName specifies table name
+func (Permission) TableName() string {
+    return "permissions"
+}
+
+// RolePermission join table model
+type RolePermission struct {
+    RoleID       string    `gorm:"type:uuid;primaryKey" json:"role_id"`
+    PermissionID string    `gorm:"type:uuid;primaryKey" json:"permission_id"`
+    AssignedAt   time.Time `gorm:"autoCreateTime" json:"assigned_at"`
+}
+
+// TableName specifies table name
+func (RolePermission) TableName() string {
+    return "role_permissions"
 }
 
 type PermissionClaim struct {
@@ -780,18 +919,38 @@ type PermissionClaim struct {
 ```go
 package models
 
-import "time"
+import (
+    "time"
+    "github.com/google/uuid"
+    "gorm.io/gorm"
+)
 
 type Task struct {
-    ID          string     `json:"id"`
-    Title       string     `json:"title"`
-    Description string     `json:"description"`
-    Status      string     `json:"status"`
-    Priority    string     `json:"priority"`
-    OwnerID     string     `json:"owner_id"`
-    CreatedAt   time.Time  `json:"created_at"`
-    UpdatedAt   time.Time  `json:"updated_at"`
-    DueDate     *time.Time `json:"due_date,omitempty"`
+    ID          string     `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+    Title       string     `gorm:"type:varchar(255);not null" json:"title"`
+    Description string     `gorm:"type:text" json:"description"`
+    Status      string     `gorm:"type:varchar(50);default:'pending'" json:"status"`
+    Priority    string     `gorm:"type:varchar(20);default:'medium'" json:"priority"`
+    OwnerID     string     `gorm:"type:uuid;not null;index" json:"owner_id"`
+    CreatedAt   time.Time  `gorm:"autoCreateTime" json:"created_at"`
+    UpdatedAt   time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+    DueDate     *time.Time `gorm:"type:timestamp" json:"due_date,omitempty"`
+    
+    // Association
+    Owner User `gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE" json:"-"`
+}
+
+// BeforeCreate GORM hook
+func (t *Task) BeforeCreate(tx *gorm.DB) error {
+    if t.ID == "" {
+        t.ID = uuid.New().String()
+    }
+    return nil
+}
+
+// TableName specifies table name
+func (Task) TableName() string {
+    return "tasks"
 }
 
 type CreateTaskRequest struct {
@@ -813,25 +972,821 @@ type UpdateTaskRequest struct {
 
 ---
 
-## PHASE 4: USER REGISTRATION & LOGIN (RUBRIC REQUIREMENT 1)
+## PHASE 4: REPOSITORIES WITH GORM
 
-*Due to message length limitations, the remaining phases (4-9) including:*
-- **Phase 4**: Repositories & Authentication Service Implementation
-- **Phase 5**: Authorization (RBAC & ABAC) with Middleware
-- **Phase 6**: Task Management CRUD APIs
-- **Phase 7**: User Profile Endpoint (SQL Injection Fix)
-- **Phase 8**: API Server Setup & Routing
-- **Phase 9**: Testing, Deployment & Stand-Out Features
+### Task 4.1: User Repository with GORM
 
-*Will be provided in a separate detailed implementation document. Each phase includes:*
-- Complete code for all repositories (user, token, role, permission, task)
-- Service layer implementations
-- Handler implementations
-- Middleware (auth, authorization, logging)
-- Router setup with proper permission checks
-- Docker configuration
-- Makefile for development
-- Optional: Postman collection, Swagger docs, unit tests, integration tests
+**File**: `internal/repository/user_repository.go`
+
+```go
+package repository
+
+import (
+    "fmt"
+    "gorm.io/gorm"
+    "github.com/yourusername/iam-authorization-service/internal/models"
+)
+
+type UserRepository struct {
+    db *gorm.DB
+}
+
+func NewUserRepository(db *gorm.DB) *UserRepository {
+    return &UserRepository{db: db}
+}
+
+// Create inserts a new user (GORM auto-generates UUID, prevents SQL injection)
+func (r *UserRepository) Create(user *models.User) error {
+    return r.db.Create(user).Error
+}
+
+// GetByEmail retrieves user by email (GORM safe from SQL injection)
+func (r *UserRepository) GetByEmail(email string) (*models.User, error) {
+    var user models.User
+    if err := r.db.Where("email = ?", email).First(&user).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, fmt.Errorf("user not found")
+        }
+        return nil, err
+    }
+    return &user, nil
+}
+
+// GetByID retrieves user by ID (GORM safe from SQL injection - CRITICAL FOR RUBRIC)
+func (r *UserRepository) GetByID(id string) (*models.User, error) {
+    var user models.User
+    if err := r.db.First(&user, "id = ?", id).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, fmt.Errorf("user not found")
+        }
+        return nil, err
+    }
+    return &user, nil
+}
+
+// Update updates user information (GORM safe from SQL injection)
+func (r *UserRepository) Update(user *models.User) error {
+    return r.db.Save(user).Error
+}
+
+// UpdatePassword updates only password field
+func (r *UserRepository) UpdatePassword(userID, passwordHash string) error {
+    return r.db.Model(&models.User{}).
+        Where("id = ?", userID).
+        Update("password_hash", passwordHash).Error
+}
+
+// Delete removes a user (GORM safe from SQL injection)
+func (r *UserRepository) Delete(id string) error {
+    return r.db.Delete(&models.User{}, "id = ?", id).Error
+}
+
+// GetAll retrieves all users (admin function)
+func (r *UserRepository) GetAll() ([]models.User, error) {
+    var users []models.User
+    if err := r.db.Find(&users).Error; err != nil {
+        return nil, err
+    }
+    return users, nil
+}
+```
+
+### Task 4.2: Token Repository with GORM
+
+**File**: `internal/repository/token_repository.go`
+
+```go
+package repository
+
+import (
+    "fmt"
+    "gorm.io/gorm"
+    "github.com/yourusername/iam-authorization-service/internal/models"
+    "time"
+)
+
+type TokenRepository struct {
+    db *gorm.DB
+}
+
+func NewTokenRepository(db *gorm.DB) *TokenRepository {
+    return &TokenRepository{db: db}
+}
+
+// Create inserts a new refresh token
+func (r *TokenRepository) Create(token *models.Token) error {
+    return r.db.Create(token).Error
+}
+
+// GetByRefreshToken retrieves token by refresh token string
+func (r *TokenRepository) GetByRefreshToken(refreshToken string) (*models.Token, error) {
+    var token models.Token
+    if err := r.db.Where("refresh_token = ?", refreshToken).First(&token).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, fmt.Errorf("token not found")
+        }
+        return nil, err
+    }
+    return &token, nil
+}
+
+// Revoke marks a refresh token as revoked
+func (r *TokenRepository) Revoke(refreshToken string) error {
+    return r.db.Model(&models.Token{}).
+        Where("refresh_token = ?", refreshToken).
+        Update("revoked", true).Error
+}
+
+// DeleteExpired removes expired tokens
+func (r *TokenRepository) DeleteExpired() error {
+    return r.db.Where("expires_at < ?", time.Now()).
+        Delete(&models.Token{}).Error
+}
+
+// RevokeAllUserTokens revokes all tokens for a user
+func (r *TokenRepository) RevokeAllUserTokens(userID string) error {
+    return r.db.Model(&models.Token{}).
+        Where("user_id = ?", userID).
+        Update("revoked", true).Error
+}
+```
+
+### Task 4.3: Role Repository with GORM
+
+**File**: `internal/repository/role_repository.go`
+
+```go
+package repository
+
+import (
+    "fmt"
+    "gorm.io/gorm"
+    "github.com/yourusername/iam-authorization-service/internal/models"
+)
+
+type RoleRepository struct {
+    db *gorm.DB
+}
+
+func NewRoleRepository(db *gorm.DB) *RoleRepository {
+    return &RoleRepository{db: db}
+}
+
+// GetByName retrieves a role by name
+func (r *RoleRepository) GetByName(name string) (*models.Role, error) {
+    var role models.Role
+    if err := r.db.Where("name = ?", name).First(&role).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, fmt.Errorf("role not found")
+        }
+        return nil, err
+    }
+    return &role, nil
+}
+
+// GetUserRoles retrieves all roles for a user with JOIN
+func (r *RoleRepository) GetUserRoles(userID string) ([]models.Role, error) {
+    var roles []models.Role
+    if err := r.db.Joins("JOIN user_roles ON user_roles.role_id = roles.id").
+        Where("user_roles.user_id = ?", userID).
+        Find(&roles).Error; err != nil {
+        return nil, err
+    }
+    return roles, nil
+}
+
+// AssignRoleToUser assigns a role to a user
+func (r *RoleRepository) AssignRoleToUser(userID, roleID string) error {
+    userRole := models.UserRole{
+        UserID: userID,
+        RoleID: roleID,
+    }
+    // Use FirstOrCreate to avoid duplicate errors
+    return r.db.Where(models.UserRole{UserID: userID, RoleID: roleID}).
+        FirstOrCreate(&userRole).Error
+}
+
+// RemoveRoleFromUser removes a role from a user
+func (r *RoleRepository) RemoveRoleFromUser(userID, roleID string) error {
+    return r.db.Where("user_id = ? AND role_id = ?", userID, roleID).
+        Delete(&models.UserRole{}).Error
+}
+
+// GetAll retrieves all roles
+func (r *RoleRepository) GetAll() ([]models.Role, error) {
+    var roles []models.Role
+    if err := r.db.Find(&roles).Error; err != nil {
+        return nil, err
+    }
+    return roles, nil
+}
+
+// Create creates a new role
+func (r *RoleRepository) Create(role *models.Role) error {
+    return r.db.Create(role).Error
+}
+```
+
+### Task 4.4: Permission Repository with GORM
+
+**File**: `internal/repository/permission_repository.go`
+
+```go
+package repository
+
+import (
+    "gorm.io/gorm"
+    "github.com/yourusername/iam-authorization-service/internal/models"
+)
+
+type PermissionRepository struct {
+    db *gorm.DB
+}
+
+func NewPermissionRepository(db *gorm.DB) *PermissionRepository {
+    return &PermissionRepository{db: db}
+}
+
+// GetRolePermissions retrieves all permissions for a role
+func (r *PermissionRepository) GetRolePermissions(roleID string) ([]models.Permission, error) {
+    var permissions []models.Permission
+    if err := r.db.Joins("JOIN role_permissions ON role_permissions.permission_id = permissions.id").
+        Where("role_permissions.role_id = ?", roleID).
+        Find(&permissions).Error; err != nil {
+        return nil, err
+    }
+    return permissions, nil
+}
+
+// GetUserPermissions retrieves all permissions for a user (through roles)
+func (r *PermissionRepository) GetUserPermissions(userID string) ([]models.Permission, error) {
+    var permissions []models.Permission
+    if err := r.db.
+        Joins("JOIN role_permissions ON role_permissions.permission_id = permissions.id").
+        Joins("JOIN user_roles ON user_roles.role_id = role_permissions.role_id").
+        Where("user_roles.user_id = ?", userID).
+        Distinct().
+        Find(&permissions).Error; err != nil {
+        return nil, err
+    }
+    return permissions, nil
+}
+
+// GetAll retrieves all permissions
+func (r *PermissionRepository) GetAll() ([]models.Permission, error) {
+    var permissions []models.Permission
+    if err := r.db.Find(&permissions).Error; err != nil {
+        return nil, err
+    }
+    return permissions, nil
+}
+
+// AssignPermissionToRole assigns a permission to a role
+func (r *PermissionRepository) AssignPermissionToRole(roleID, permissionID string) error {
+    rolePermission := models.RolePermission{
+        RoleID:       roleID,
+        PermissionID: permissionID,
+    }
+    return r.db.Where(models.RolePermission{RoleID: roleID, PermissionID: permissionID}).
+        FirstOrCreate(&rolePermission).Error
+}
+
+// RemovePermissionFromRole removes a permission from a role
+func (r *PermissionRepository) RemovePermissionFromRole(roleID, permissionID string) error {
+    return r.db.Where("role_id = ? AND permission_id = ?", roleID, permissionID).
+        Delete(&models.RolePermission{}).Error
+}
+
+// Create creates a new permission
+func (r *PermissionRepository) Create(permission *models.Permission) error {
+    return r.db.Create(permission).Error
+}
+```
+
+### Task 4.5: Task Repository with GORM
+
+**File**: `internal/repository/task_repository.go`
+
+```go
+package repository
+
+import (
+    "fmt"
+    "gorm.io/gorm"
+    "github.com/yourusername/iam-authorization-service/internal/models"
+)
+
+type TaskRepository struct {
+    db *gorm.DB
+}
+
+func NewTaskRepository(db *gorm.DB) *TaskRepository {
+    return &TaskRepository{db: db}
+}
+
+// Create inserts a new task (GORM prevents SQL injection)
+func (r *TaskRepository) Create(task *models.Task) error {
+    return r.db.Create(task).Error
+}
+
+// GetByID retrieves a task by ID
+func (r *TaskRepository) GetByID(id string) (*models.Task, error) {
+    var task models.Task
+    if err := r.db.Preload("Owner").First(&task, "id = ?", id).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, fmt.Errorf("task not found")
+        }
+        return nil, err
+    }
+    return &task, nil
+}
+
+// GetAll retrieves all tasks (optionally filtered by owner)
+func (r *TaskRepository) GetAll(ownerID string) ([]models.Task, error) {
+    var tasks []models.Task
+    query := r.db.Preload("Owner")
+    
+    if ownerID != "" {
+        query = query.Where("owner_id = ?", ownerID)
+    }
+    
+    if err := query.Order("created_at DESC").Find(&tasks).Error; err != nil {
+        return nil, err
+    }
+    return tasks, nil
+}
+
+// GetByOwner retrieves all tasks for a specific owner
+func (r *TaskRepository) GetByOwner(ownerID string) ([]models.Task, error) {
+    var tasks []models.Task
+    if err := r.db.Where("owner_id = ?", ownerID).
+        Order("created_at DESC").
+        Find(&tasks).Error; err != nil {
+        return nil, err
+    }
+    return tasks, nil
+}
+
+// Update updates a task (GORM prevents SQL injection)
+func (r *TaskRepository) Update(task *models.Task) error {
+    return r.db.Save(task).Error
+}
+
+// Delete removes a task (GORM prevents SQL injection)
+func (r *TaskRepository) Delete(id string) error {
+    return r.db.Delete(&models.Task{}, "id = ?", id).Error
+}
+
+// GetWithPagination retrieves tasks with pagination (for stand-out feature)
+func (r *TaskRepository) GetWithPagination(ownerID string, page, limit int, sortBy, order string) ([]models.Task, int64, error) {
+    var tasks []models.Task
+    var total int64
+    
+    query := r.db.Model(&models.Task{})
+    if ownerID != "" {
+        query = query.Where("owner_id = ?", ownerID)
+    }
+    
+    // Count total
+    query.Count(&total)
+    
+    // Apply pagination and sorting
+    offset := (page - 1) * limit
+    orderClause := fmt.Sprintf("%s %s", sortBy, order)
+    
+    if err := query.Order(orderClause).
+        Limit(limit).
+        Offset(offset).
+        Find(&tasks).Error; err != nil {
+        return nil, 0, err
+    }
+    
+    return tasks, total, nil
+}
+```
+
+### Task 4.6: Update Authentication Service for GORM
+
+**File**: `internal/services/auth_service.go`
+
+```go
+package services
+
+import (
+    "fmt"
+    "time"
+
+    "github.com/yourusername/iam-authorization-service/config"
+    "github.com/yourusername/iam-authorization-service/internal/models"
+    "github.com/yourusername/iam-authorization-service/internal/repository"
+    "github.com/yourusername/iam-authorization-service/internal/utils"
+)
+
+type AuthService struct {
+    userRepo  *repository.UserRepository
+    tokenRepo *repository.TokenRepository
+    roleRepo  *repository.RoleRepository
+    permRepo  *repository.PermissionRepository
+    config    *config.Config
+}
+
+func NewAuthService(
+    userRepo *repository.UserRepository,
+    tokenRepo *repository.TokenRepository,
+    roleRepo *repository.RoleRepository,
+    permRepo *repository.PermissionRepository,
+    cfg *config.Config,
+) *AuthService {
+    return &AuthService{
+        userRepo:  userRepo,
+        tokenRepo: tokenRepo,
+        roleRepo:  roleRepo,
+        permRepo:  permRepo,
+        config:    cfg,
+    }
+}
+
+// Register creates new user with default 'user' role (RUBRIC REQUIREMENT)
+func (s *AuthService) Register(email, password string) (*models.User, error) {
+    // Validate input
+    if err := utils.ValidateEmail(email); err != nil {
+        return nil, utils.ValidationError(err.Error())
+    }
+    if err := utils.ValidatePassword(password); err != nil {
+        return nil, utils.ValidationError(err.Error())
+    }
+
+    // Check if user exists
+    if _, err := s.userRepo.GetByEmail(email); err == nil {
+        return nil, utils.ValidationError("user already exists")
+    }
+
+    // Hash password
+    hashedPassword, err := utils.HashPassword(password)
+    if err != nil {
+        return nil, utils.InternalServerError("failed to hash password")
+    }
+
+    // Create user
+    user := &models.User{
+        Email:        email,
+        PasswordHash: hashedPassword,
+        IsActive:     true,
+    }
+
+    if err := s.userRepo.Create(user); err != nil {
+        return nil, utils.InternalServerError("failed to create user")
+    }
+
+    // Assign default 'user' role (RUBRIC REQUIREMENT)
+    defaultRole, err := s.roleRepo.GetByName("user")
+    if err != nil {
+        return nil, utils.InternalServerError("failed to get default role")
+    }
+
+    if err := s.roleRepo.AssignRoleToUser(user.ID, defaultRole.ID); err != nil {
+        return nil, utils.InternalServerError("failed to assign role")
+    }
+
+    // Clear password hash before returning
+    user.PasswordHash = ""
+    return user, nil
+}
+
+// Login authenticates user and returns JWT tokens with roles/permissions (RUBRIC REQUIREMENT)
+func (s *AuthService) Login(email, password string) (*models.TokenPair, error) {
+    // Get user by email
+    user, err := s.userRepo.GetByEmail(email)
+    if err != nil {
+        return nil, utils.UnauthorizedError("invalid credentials")
+    }
+
+    // Verify password
+    if err := utils.ComparePassword(user.PasswordHash, password); err != nil {
+        return nil, utils.UnauthorizedError("invalid credentials")
+    }
+
+    // Check if user is active
+    if !user.IsActive {
+        return nil, utils.UnauthorizedError("user account is inactive")
+    }
+
+    // Get user roles (RUBRIC REQUIREMENT)
+    roles, err := s.roleRepo.GetUserRoles(user.ID)
+    if err != nil {
+        return nil, utils.InternalServerError("failed to get user roles")
+    }
+
+    roleNames := make([]string, len(roles))
+    for i, role := range roles {
+        roleNames[i] = role.Name
+    }
+
+    // Get user permissions grouped by resource (RUBRIC REQUIREMENT)
+    allPermissions, err := s.permRepo.GetUserPermissions(user.ID)
+    if err != nil {
+        return nil, utils.InternalServerError("failed to get user permissions")
+    }
+
+    // Group permissions by resource for JWT claims
+    permissionMap := make(map[string][]string)
+    for _, perm := range allPermissions {
+        permissionMap[perm.Resource] = append(permissionMap[perm.Resource], perm.Action)
+    }
+
+    permissions := make([]models.PermissionClaim, 0, len(permissionMap))
+    for resource, actions := range permissionMap {
+        permissions = append(permissions, models.PermissionClaim{
+            Resource: resource,
+            Actions:  actions,
+        })
+    }
+
+    // Generate access token (1 hour) with embedded roles and permissions
+    accessToken, err := utils.GenerateAccessToken(*user, roleNames, permissions, s.config.JWT.Secret, s.config.JWT.AccessTokenTTL)
+    if err != nil {
+        return nil, utils.InternalServerError("failed to generate access token")
+    }
+
+    // Generate refresh token (1 hour)
+    refreshToken, err := utils.GenerateRefreshToken()
+    if err != nil {
+        return nil, utils.InternalServerError("failed to generate refresh token")
+    }
+
+    // Store refresh token in database
+    token := &models.Token{
+        UserID:       user.ID,
+        RefreshToken: refreshToken,
+        ExpiresAt:    time.Now().Add(time.Duration(s.config.JWT.RefreshTokenTTL) * time.Second),
+        Revoked:      false,
+    }
+
+    if err := s.tokenRepo.Create(token); err != nil {
+        return nil, utils.InternalServerError("failed to store refresh token")
+    }
+
+    return &models.TokenPair{
+        AccessToken:  accessToken,
+        RefreshToken: refreshToken,
+        ExpiresIn:    s.config.JWT.AccessTokenTTL,
+    }, nil
+}
+
+// Refresh generates new tokens from valid refresh token (RUBRIC REQUIREMENT)
+func (s *AuthService) Refresh(refreshToken string) (*models.TokenPair, error) {
+    // Get token from database
+    token, err := s.tokenRepo.GetByRefreshToken(refreshToken)
+    if err != nil {
+        return nil, utils.UnauthorizedError("invalid refresh token")
+    }
+
+    // Check if revoked
+    if token.Revoked {
+        return nil, utils.UnauthorizedError("refresh token has been revoked")
+    }
+
+    // Check if expired
+    if time.Now().After(token.ExpiresAt) {
+        return nil, utils.UnauthorizedError("refresh token has expired")
+    }
+
+    // Get user
+    user, err := s.userRepo.GetByID(token.UserID)
+    if err != nil {
+        return nil, utils.UnauthorizedError("user not found")
+    }
+
+    // Get user roles
+    roles, err := s.roleRepo.GetUserRoles(user.ID)
+    if err != nil {
+        return nil, utils.InternalServerError("failed to get user roles")
+    }
+
+    roleNames := make([]string, len(roles))
+    for i, role := range roles {
+        roleNames[i] = role.Name
+    }
+
+    // Get user permissions
+    allPermissions, err := s.permRepo.GetUserPermissions(user.ID)
+    if err != nil {
+        return nil, utils.InternalServerError("failed to get user permissions")
+    }
+
+    // Group permissions by resource
+    permissionMap := make(map[string][]string)
+    for _, perm := range allPermissions {
+        permissionMap[perm.Resource] = append(permissionMap[perm.Resource], perm.Action)
+    }
+
+    permissions := make([]models.PermissionClaim, 0, len(permissionMap))
+    for resource, actions := range permissionMap {
+        permissions = append(permissions, models.PermissionClaim{
+            Resource: resource,
+            Actions:  actions,
+        })
+    }
+
+    // Generate new access token
+    newAccessToken, err := utils.GenerateAccessToken(*user, roleNames, permissions, s.config.JWT.Secret, s.config.JWT.AccessTokenTTL)
+    if err != nil {
+        return nil, utils.InternalServerError("failed to generate access token")
+    }
+
+    // Generate new refresh token
+    newRefreshToken, err := utils.GenerateRefreshToken()
+    if err != nil {
+        return nil, utils.InternalServerError("failed to generate refresh token")
+    }
+
+    // Revoke old refresh token
+    if err := s.tokenRepo.Revoke(refreshToken); err != nil {
+        return nil, utils.InternalServerError("failed to revoke old token")
+    }
+
+    // Store new refresh token
+    newToken := &models.Token{
+        UserID:       user.ID,
+        RefreshToken: newRefreshToken,
+        ExpiresAt:    time.Now().Add(time.Duration(s.config.JWT.RefreshTokenTTL) * time.Second),
+        Revoked:      false,
+    }
+
+    if err := s.tokenRepo.Create(newToken); err != nil {
+        return nil, utils.InternalServerError("failed to store new refresh token")
+    }
+
+    return &models.TokenPair{
+        AccessToken:  newAccessToken,
+        RefreshToken: newRefreshToken,
+        ExpiresIn:    s.config.JWT.AccessTokenTTL,
+    }, nil
+}
+
+// Logout revokes a refresh token
+func (s *AuthService) Logout(refreshToken string) error {
+    return s.tokenRepo.Revoke(refreshToken)
+}
+```
+
+### Task 4.7: Update Server Initialization for GORM
+
+**File**: `internal/api/server.go`
+
+```go
+package api
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/gin-gonic/gin"
+    "gorm.io/gorm"
+    "github.com/yourusername/iam-authorization-service/config"
+    "github.com/yourusername/iam-authorization-service/internal/handlers"
+    "github.com/yourusername/iam-authorization-service/internal/repository"
+    "github.com/yourusername/iam-authorization-service/internal/services"
+)
+
+type Server struct {
+    config *config.Config
+    router *gin.Engine
+    db     *gorm.DB
+}
+
+func NewServer(cfg *config.Config, db *gorm.DB) *Server {
+    // Set Gin mode
+    if cfg.Env == "production" {
+        gin.SetMode(gin.ReleaseMode)
+    }
+
+    server := &Server{
+        config: cfg,
+        router: gin.Default(),
+        db:     db,
+    }
+
+    // Initialize repositories
+    repos := initRepositories(db)
+    
+    // Initialize services
+    svcs := initServices(repos, cfg)
+    
+    // Initialize handlers
+    handlers := initHandlers(svcs)
+    
+    // Setup routes
+    setupRoutes(server.router, handlers, svcs)
+    
+    return server
+}
+
+func (s *Server) Run() error {
+    addr := fmt.Sprintf(":%s", s.config.Server.Port)
+    log.Printf("Server starting on %s", addr)
+    return s.router.Run(addr)
+}
+
+type Repositories struct {
+    User       *repository.UserRepository
+    Token      *repository.TokenRepository
+    Role       *repository.RoleRepository
+    Permission *repository.PermissionRepository
+    Task       *repository.TaskRepository
+}
+
+func initRepositories(db *gorm.DB) *Repositories {
+    return &Repositories{
+        User:       repository.NewUserRepository(db),
+        Token:      repository.NewTokenRepository(db),
+        Role:       repository.NewRoleRepository(db),
+        Permission: repository.NewPermissionRepository(db),
+        Task:       repository.NewTaskRepository(db),
+    }
+}
+
+type Services struct {
+    Auth  *services.AuthService
+    Authz *services.AuthzService
+    Task  *services.TaskService
+    User  *services.UserService
+}
+
+func initServices(repos *Repositories, cfg *config.Config) *Services {
+    authzService := services.NewAuthzService(repos.Role, repos.Permission)
+    
+    return &Services{
+        Auth:  services.NewAuthService(repos.User, repos.Token, repos.Role, repos.Permission, cfg),
+        Authz: authzService,
+        Task:  services.NewTaskService(repos.Task, authzService),
+        User:  services.NewUserService(repos.User),
+    }
+}
+
+type Handlers struct {
+    Auth *handlers.AuthHandler
+    Task *handlers.TaskHandler
+    User *handlers.UserHandler
+    Role *handlers.RoleHandler
+}
+
+func initHandlers(svcs *Services) *Handlers {
+    return &Handlers{
+        Auth: handlers.NewAuthHandler(svcs.Auth),
+        Task: handlers.NewTaskHandler(svcs.Task),
+        User: handlers.NewUserHandler(svcs.User, svcs.Authz),
+        Role: handlers.NewRoleHandler(svcs.Authz),
+    }
+}
+```
+
+### Task 4.8: Update Main Entry Point for GORM
+
+**File**: `cmd/api/main.go`
+
+```go
+package main
+
+import (
+    "log"
+
+    "github.com/yourusername/iam-authorization-service/config"
+    "github.com/yourusername/iam-authorization-service/internal/api"
+    "github.com/yourusername/iam-authorization-service/internal/database"
+)
+
+func main() {
+    // Load configuration
+    cfg, err := config.Load()
+    if err != nil {
+        log.Fatalf("Failed to load config: %v", err)
+    }
+
+    // Initialize GORM database connection
+    db, err := database.NewPostgres(cfg.Database)
+    if err != nil {
+        log.Fatalf("Failed to connect to database: %v", err)
+    }
+
+    log.Println("Database connection established")
+
+    // Optional: Run auto-migration in development
+    // if cfg.Env == "development" {
+    //     if err := database.AutoMigrate(db); err != nil {
+    //         log.Fatalf("Failed to auto-migrate: %v", err)
+    //     }
+    // }
+
+    // Initialize and start server
+    server := api.NewServer(cfg, db)
+    
+    log.Printf("Starting Taskify server on port %s", cfg.Server.Port)
+    if err := server.Run(); err != nil {
+        log.Fatalf("Server failed: %v", err)
+    }
+}
+```
 
 ---
 
@@ -1043,26 +1998,31 @@ make docker-down
 
 1. **Follow the Development Order**: Complete phases in sequence to avoid dependency issues
 2. **Test as You Build**: Test each endpoint immediately after implementation
-3. **Parameterized Queries**: ALWAYS use $1, $2, etc. - Never concatenate strings in SQL
-4. **JWT Claims**: Embed roles and permissions in access_token for efficient authorization
-5. **Ownership Checks**: Regular users can only access their own resources; admins bypass this
-6. **Error Handling**: Return appropriate HTTP status codes and clear error messages
-7. **Database Migrations**: Use ascending numeric prefixes (000001, 000002, etc.)
-8. **Seed Data**: Must include default roles, permissions, and admin user
-9. **Documentation**: Comment complex logic and maintain clear README
+3. **GORM Usage**: Use GORM methods (Create, Find, Where, etc.) - GORM automatically prevents SQL injection
+4. **GORM Tags**: All models must have proper GORM struct tags for column types, indexes, and constraints
+5. **JWT Claims**: Embed roles and permissions in access_token for efficient authorization
+6. **Ownership Checks**: Regular users can only access their own resources; admins bypass this
+7. **Error Handling**: Return appropriate HTTP status codes and clear error messages
+8. **Database Migrations**: Use golang-migrate for migrations, but GORM for queries
+9. **Seed Data**: Must include default roles, permissions, and admin user
+10. **Documentation**: Comment complex logic and maintain clear README
+11. **GORM Associations**: Use Preload() to load related data, define associations in models
+12. **SQL Injection Prevention**: GORM automatically uses parameterized queries - never use raw SQL strings
 
 ---
 
 ## COMMON PITFALLS TO AVOID
 
-1. ❌ **SQL Injection**: Never use string concatenation - always use parameterized queries
-2. ❌ **Exposing Password Hashes**: Always clear password_hash before returning user objects
-3. ❌ **Missing Authorization**: Every protected endpoint must have middleware
-4. ❌ **Weak Passwords**: Enforce minimum 8 characters
-5. ❌ **Expired Tokens**: Check token expiry in refresh endpoint
-6. ❌ **Missing Default Role**: Registration must assign 'user' role
-7. ❌ **Empty JWT Claims**: Login must include roles and permissions in token
-8. ❌ **Incorrect Status Codes**: Use 401 for auth issues, 403 for authorization, 404 for not found
+1. ❌ **SQL Injection**: Never bypass GORM - always use GORM methods (Where, Create, Find, etc.)
+2. ❌ **Missing GORM Tags**: All models must have proper gorm struct tags
+3. ❌ **Exposing Password Hashes**: Always clear password_hash before returning user objects (use json:"-" tag)
+4. ❌ **Missing Authorization**: Every protected endpoint must have middleware
+5. ❌ **Weak Passwords**: Enforce minimum 8 characters
+6. ❌ **Expired Tokens**: Check token expiry in refresh endpoint
+7. ❌ **Missing Default Role**: Registration must assign 'user' role
+8. ❌ **Empty JWT Claims**: Login must include roles and permissions in token
+9. ❌ **Incorrect Status Codes**: Use 401 for auth issues, 403 for authorization, 404 for not found
+10. ❌ **Forgetting Preload**: Use db.Preload() to load associations, or you'll get empty related data
 
 ---
 
@@ -1090,11 +2050,13 @@ Your Phase 1 implementation is complete when:
 
 - **Go Documentation**: https://golang.org/doc/
 - **Gin Framework**: https://gin-gonic.com/docs/
+- **GORM Documentation**: https://gorm.io/docs/
+- **GORM PostgreSQL**: https://gorm.io/docs/connecting_to_the_database.html#PostgreSQL
 - **PostgreSQL**: https://www.postgresql.org/docs/
 - **JWT**: https://jwt.io/
 - **golang-migrate**: https://github.com/golang-migrate/migrate
 - **bcrypt**: https://pkg.go.dev/golang.org/x/crypto/bcrypt
-- **SQL Injection Prevention**: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+- **GORM Associations**: https://gorm.io/docs/associations.html
 
 ---
 

@@ -2,9 +2,12 @@ package main
 
 import (
 	"log"
+	"os"
 	"task-manager/backend/internal/handlers"
 	"task-manager/backend/internal/repositories"
 	"time"
+
+	dbseed "task-manager/backend/internal/database"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -16,6 +19,15 @@ func main() {
 	db, err := dbCfg.Connect()
 	if err != nil {
 		log.Fatal("Database connection failed: ", err)
+	}
+
+	// Optional: seed default data on startup when explicitly enabled
+	if os.Getenv("SEED_ON_STARTUP") == "true" {
+		if err := dbseed.Seed(db); err != nil {
+			log.Println("Database seed failed:", err)
+		} else {
+			log.Println("Database seed completed")
+		}
 	}
 
 	sqlDB, err := db.DB()
@@ -34,6 +46,11 @@ func main() {
 
 	registrationHandler :=
 		handlers.NewRegisterHandler(db, nil)
+  	// for seeding the database
+	var adminHandler *handlers.AdminHandler
+	if os.Getenv("ALLOW_SEED_ENDPOINT") == "true" {
+		adminHandler = handlers.NewAdminHandler(db)
+	}
 
 	r := gin.Default()
 
@@ -68,6 +85,13 @@ func main() {
 			userRoutes.GET("/:user_id/tasks", taskHandler.GetTasksByUser)
 			userRoutes.GET("/profile", userHandler.GetUserProfile)
 			userRoutes.GET("/profile/:user_id", userHandler.GetUserProfileByUserId)
+		}
+		// for seeding the database
+		if adminHandler != nil {
+			adminRoutes := v1.Group("/admin")
+			{
+				adminRoutes.POST("/seed", adminHandler.Seed)
+			}
 		}
 	}
 	r.Run(":8080")

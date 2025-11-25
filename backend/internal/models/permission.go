@@ -17,4 +17,13 @@ type Permission struct {
 	DeletedAt   gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 }
 
+// PermissionClaim represents a flattened permission entry that is embedded
+// into JWT access tokens. It groups all allowed actions for a given resource.
+// Example:
+//   { "resource": "task", "actions": ["read", "write", "delete"] }
+type PermissionClaim struct {
+	Resource string   `json:"resource"`
+	Actions  []string `json:"actions"`
+}
+
 

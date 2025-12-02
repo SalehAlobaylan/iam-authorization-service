@@ -34,7 +34,19 @@ type JWTConfig struct {
 	RefreshTokenTTL int    `yaml:"refresh_token_ttl"` // in seconds
 }
 
-// Load reads configuration from YAML file and overlays environment variables where provided.
+/*
+* Load aggregates application configuration into a single Config struct.
+* It reads base values from a YAML file on disk using CONFIG_PATH when set,
+* falling back to the default path config/config.yaml when CONFIG_PATH is empty.
+* After parsing the YAML into cfg, it selectively overrides fields with values
+* from environment variables (for example PORT, DB_HOST, DB_USER, DB_PASSWORD,
+* DB_NAME, DB_SSLMODE, JWT_SECRET, ENV) when they are present.
+* This pattern allows you to keep sensible local defaults in config.yaml while
+* still customizing behavior per environment (Docker, staging, production)
+* without modifying the file itself.
+* On success it returns a pointer to the populated Config; on failure it
+* returns a wrapped error that describes whether reading or parsing failed.
+ */
 func Load() (*Config, error) {
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
@@ -85,11 +97,3 @@ func Load() (*Config, error) {
 
 	return &cfg, nil
 }
-
-
-
-
-
-
-
-

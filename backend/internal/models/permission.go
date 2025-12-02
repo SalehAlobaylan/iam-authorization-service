@@ -15,6 +15,26 @@ type Permission struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `json:"deleted_at" gorm:"index"`
+
+	// Associations
+	Roles []Role `json:"-" gorm:"many2many:role_permissions;"`
+}
+
+// TableName overrides the default table name used by GORM.
+func (Permission) TableName() string {
+	return "permissions"
+}
+
+// BeforeCreate ensures a UUID primary key is set for new Permission records.
+func (p *Permission) BeforeCreate(tx *gorm.DB) error {
+	if p.ID == uuid.Nil {
+		id, err := uuid.NewV4()
+		if err != nil {
+			return err
+		}
+		p.ID = id
+	}
+	return nil
 }
 
 // PermissionClaim represents a flattened permission entry that is embedded

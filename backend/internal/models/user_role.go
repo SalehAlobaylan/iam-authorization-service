@@ -12,4 +12,7 @@ type UserRole struct {
 	AssignedAt time.Time `json:"assigned_at" gorm:"column:assigned_at"`
 }
 
-
+// TableName overrides the default table name used by GORM.
+func (UserRole) TableName() string {
+	return "user_roles"
+}

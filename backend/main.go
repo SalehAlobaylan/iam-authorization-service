@@ -3,11 +3,11 @@ package main
 import (
 	"log"
 	"os"
-	"task-manager/backend/internal/handlers"
-	"task-manager/backend/internal/repositories"
 	"time"
 
+	"task-manager/backend/config"
 	dbseed "task-manager/backend/internal/database"
+	"task-manager/backend/internal/handlers"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -15,8 +15,12 @@ import (
 
 func main() {
 
-	dbCfg := repositories.NewDatabaseConfig()
-	db, err := dbCfg.Connect()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal("Failed to load config: ", err)
+	}
+
+	db, err := dbseed.NewPostgres(cfg.Database)
 	if err != nil {
 		log.Fatal("Database connection failed: ", err)
 	}
@@ -46,7 +50,7 @@ func main() {
 
 	registrationHandler :=
 		handlers.NewRegisterHandler(db, nil)
-  	// for seeding the database
+		// for seeding the database
 	var adminHandler *handlers.AdminHandler
 	if os.Getenv("ALLOW_SEED_ENDPOINT") == "true" {
 		adminHandler = handlers.NewAdminHandler(db)

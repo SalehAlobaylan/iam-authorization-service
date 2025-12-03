@@ -4,6 +4,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/gofrs/uuid"
 )
 
 func GetEnv(key, defaultValue string) string {
@@ -35,4 +37,15 @@ func GetEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
 		return defaultValue
 	}
 	return value
+}
+
+// ParseUUID is a small helper that parses a UUID string into a uuid.UUID,
+// returning a descriptive error when the format is invalid. It is used by
+// repositories and services to keep UUID validation consistent.
+func ParseUUID(id string) (uuid.UUID, error) {
+	parsed, err := uuid.FromString(id)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return parsed, nil
 }

@@ -14,11 +14,9 @@
 
 ```
 iam-authorization-service/
-├── cmd/
-│   └── api/
-│       └── main.go                    # Application entry point
-├── internal/
-│   ├── api/                           # API layer (Gin setup)
+├── src/
+│   ├── main.go                        # Application entry point
+│   ├── routes/                        # Routing layer (Gin setup)
 │   │   ├── router.go                  # Route definitions
 │   │   ├── middleware.go              # Middleware setup
 │   │   └── server.go                  # Server initialization
@@ -51,6 +49,9 @@ iam-authorization-service/
 │   │   └── logging.go                 # Request logging
 │   ├── database/                      # Database connection
 │   │   └── postgres.go                # PostgreSQL setup
+│   ├── config/
+│   │   ├── config.go                  # Config struct & loading
+│   │   └── config.yaml                # Config file
 │   └── utils/                         # Utilities
 │       ├── jwt.go                     # JWT utilities
 │       ├── password.go                # Password hashing
@@ -58,9 +59,6 @@ iam-authorization-service/
 │       └── errors.go                  # Error handling
 ├── database-migrations/
 │   └── migrations/                    # SQL migration files
-├── config/
-│   ├── config.go                      # Config struct & loading
-│   └── config.yaml                    # Config file
 ├── scripts/
 │   ├── seed.sql                       # Initial data
 │   └── run-migrations.sh              # Migration script
@@ -110,7 +108,7 @@ go mod tidy
 
 ### Task 1.2: Create Configuration Management
 
-**File**: `config/config.go`
+**File**: `src/config/config.go`
 
 ```go
 package config
@@ -151,7 +149,7 @@ type JWTConfig struct {
 func Load() (*Config, error) {
     configPath := os.Getenv("CONFIG_PATH")
     if configPath == "" {
-        configPath = "config/config.yaml"
+        configPath = "src/config/config.yaml"
     }
 
     file, err := os.ReadFile(configPath)
@@ -179,7 +177,7 @@ func Load() (*Config, error) {
 }
 ```
 
-**File**: `config/config.yaml`
+**File**: `src/config/config.yaml`
 
 ```yaml
 env: development
@@ -229,7 +227,7 @@ ENV=development
 
 ### Task 2.1: Database Connection with GORM
 
-**File**: `internal/database/postgres.go`
+**File**: `src/database/postgres.go`
 
 ```go
 package database
@@ -241,8 +239,8 @@ import (
     "gorm.io/driver/postgres"
     "gorm.io/gorm"
     "gorm.io/gorm/logger"
-    "github.com/yourusername/iam-authorization-service/config"
-    "github.com/yourusername/iam-authorization-service/internal/models"
+    "github.com/yourusername/iam-authorization-service/src/config"
+    "github.com/yourusername/iam-authorization-service/src/models"
 )
 
 func NewPostgres(cfg config.DatabaseConfig) (*gorm.DB, error) {
@@ -513,7 +511,7 @@ SELECT
 
 ### Task 3.1: Password Utilities
 
-**File**: `internal/utils/password.go`
+**File**: `src/utils/password.go`
 
 ```go
 package utils
@@ -539,7 +537,7 @@ func ComparePassword(hashedPassword, password string) error {
 
 ### Task 3.2: JWT Utilities
 
-**File**: `internal/utils/jwt.go`
+**File**: `src/utils/jwt.go`
 
 ```go
 package utils
@@ -551,7 +549,7 @@ import (
     "time"
 
     "github.com/golang-jwt/jwt/v5"
-    "github.com/yourusername/iam-authorization-service/internal/models"
+    "github.com/yourusername/iam-authorization-service/src/models"
 )
 
 type AccessTokenClaims struct {
@@ -623,7 +621,7 @@ func ValidateAccessToken(tokenString, secret string) (*AccessTokenClaims, error)
 
 ### Task 3.3: Validator Utilities
 
-**File**: `internal/utils/validator.go`
+**File**: `src/utils/validator.go`
 
 ```go
 package utils
@@ -664,7 +662,7 @@ func ValidateUUID(id string) error {
 
 ### Task 3.4: Error Utilities
 
-**File**: `internal/utils/errors.go`
+**File**: `src/utils/errors.go`
 
 ```go
 package utils
@@ -711,7 +709,7 @@ func InternalServerError(message string) *APIError {
 
 ### Task 3.5: Data Models
 
-**File**: `internal/models/user.go`
+**File**: `src/models/user.go`
 
 ```go
 package models
@@ -766,7 +764,7 @@ type LoginResponse struct {
 }
 ```
 
-**File**: `internal/models/token.go`
+**File**: `src/models/token.go`
 
 ```go
 package models
@@ -813,7 +811,7 @@ type RefreshTokenRequest struct {
 }
 ```
 
-**File**: `internal/models/role.go`
+**File**: `src/models/role.go`
 
 ```go
 package models
@@ -861,7 +859,7 @@ func (UserRole) TableName() string {
 }
 ```
 
-**File**: `internal/models/permission.go`
+**File**: `src/models/permission.go`
 
 ```go
 package models
@@ -914,7 +912,7 @@ type PermissionClaim struct {
 }
 ```
 
-**File**: `internal/models/task.go`
+**File**: `src/models/task.go`
 
 ```go
 package models
@@ -976,7 +974,7 @@ type UpdateTaskRequest struct {
 
 ### Task 4.1: User Repository with GORM
 
-**File**: `internal/repository/user_repository.go`
+**File**: `src/repository/user_repository.go`
 
 ```go
 package repository
@@ -984,7 +982,7 @@ package repository
 import (
     "fmt"
     "gorm.io/gorm"
-    "github.com/yourusername/iam-authorization-service/internal/models"
+    "github.com/yourusername/iam-authorization-service/src/models"
 )
 
 type UserRepository struct {
@@ -1053,7 +1051,7 @@ func (r *UserRepository) GetAll() ([]models.User, error) {
 
 ### Task 4.2: Token Repository with GORM
 
-**File**: `internal/repository/token_repository.go`
+**File**: `src/repository/token_repository.go`
 
 ```go
 package repository
@@ -1061,7 +1059,7 @@ package repository
 import (
     "fmt"
     "gorm.io/gorm"
-    "github.com/yourusername/iam-authorization-service/internal/models"
+    "github.com/yourusername/iam-authorization-service/src/models"
     "time"
 )
 
@@ -1113,7 +1111,7 @@ func (r *TokenRepository) RevokeAllUserTokens(userID string) error {
 
 ### Task 4.3: Role Repository with GORM
 
-**File**: `internal/repository/role_repository.go`
+**File**: `src/repository/role_repository.go`
 
 ```go
 package repository
@@ -1121,7 +1119,7 @@ package repository
 import (
     "fmt"
     "gorm.io/gorm"
-    "github.com/yourusername/iam-authorization-service/internal/models"
+    "github.com/yourusername/iam-authorization-service/src/models"
 )
 
 type RoleRepository struct {
@@ -1189,14 +1187,14 @@ func (r *RoleRepository) Create(role *models.Role) error {
 
 ### Task 4.4: Permission Repository with GORM
 
-**File**: `internal/repository/permission_repository.go`
+**File**: `src/repository/permission_repository.go`
 
 ```go
 package repository
 
 import (
     "gorm.io/gorm"
-    "github.com/yourusername/iam-authorization-service/internal/models"
+    "github.com/yourusername/iam-authorization-service/src/models"
 )
 
 type PermissionRepository struct {
@@ -1265,7 +1263,7 @@ func (r *PermissionRepository) Create(permission *models.Permission) error {
 
 ### Task 4.5: Task Repository with GORM
 
-**File**: `internal/repository/task_repository.go`
+**File**: `src/repository/task_repository.go`
 
 ```go
 package repository
@@ -1273,7 +1271,7 @@ package repository
 import (
     "fmt"
     "gorm.io/gorm"
-    "github.com/yourusername/iam-authorization-service/internal/models"
+    "github.com/yourusername/iam-authorization-service/src/models"
 )
 
 type TaskRepository struct {
@@ -1367,7 +1365,7 @@ func (r *TaskRepository) GetWithPagination(ownerID string, page, limit int, sort
 
 ### Task 4.6: Update Authentication Service for GORM
 
-**File**: `internal/services/auth_service.go`
+**File**: `src/services/auth_service.go`
 
 ```go
 package services
@@ -1376,10 +1374,10 @@ import (
     "fmt"
     "time"
 
-    "github.com/yourusername/iam-authorization-service/config"
-    "github.com/yourusername/iam-authorization-service/internal/models"
-    "github.com/yourusername/iam-authorization-service/internal/repository"
-    "github.com/yourusername/iam-authorization-service/internal/utils"
+    "github.com/yourusername/iam-authorization-service/src/config"
+    "github.com/yourusername/iam-authorization-service/src/models"
+    "github.com/yourusername/iam-authorization-service/src/repository"
+    "github.com/yourusername/iam-authorization-service/src/utils"
 )
 
 type AuthService struct {
@@ -1632,10 +1630,10 @@ func (s *AuthService) Logout(refreshToken string) error {
 
 ### Task 4.7: Update Server Initialization for GORM
 
-**File**: `internal/api/server.go`
+**File**: `src/routes/server.go`
 
 ```go
-package api
+package routes
 
 import (
     "fmt"
@@ -1643,10 +1641,10 @@ import (
 
     "github.com/gin-gonic/gin"
     "gorm.io/gorm"
-    "github.com/yourusername/iam-authorization-service/config"
-    "github.com/yourusername/iam-authorization-service/internal/handlers"
-    "github.com/yourusername/iam-authorization-service/internal/repository"
-    "github.com/yourusername/iam-authorization-service/internal/services"
+    "github.com/yourusername/iam-authorization-service/src/config"
+    "github.com/yourusername/iam-authorization-service/src/handlers"
+    "github.com/yourusername/iam-authorization-service/src/repository"
+    "github.com/yourusername/iam-authorization-service/src/services"
 )
 
 type Server struct {
@@ -1743,7 +1741,7 @@ func initHandlers(svcs *Services) *Handlers {
 
 ### Task 4.8: Update Main Entry Point for GORM
 
-**File**: `cmd/api/main.go`
+**File**: `src/main.go`
 
 ```go
 package main
@@ -1751,9 +1749,9 @@ package main
 import (
     "log"
 
-    "github.com/yourusername/iam-authorization-service/config"
-    "github.com/yourusername/iam-authorization-service/internal/api"
-    "github.com/yourusername/iam-authorization-service/internal/database"
+    "github.com/yourusername/iam-authorization-service/src/config"
+    "github.com/yourusername/iam-authorization-service/src/routes"
+    "github.com/yourusername/iam-authorization-service/src/database"
 )
 
 func main() {
@@ -1779,7 +1777,7 @@ func main() {
     // }
 
     // Initialize and start server
-    server := api.NewServer(cfg, db)
+    server := routes.NewServer(cfg, db)
     
     log.Printf("Starting Taskify server on port %s", cfg.Server.Port)
     if err := server.Run(); err != nil {
@@ -1889,11 +1887,11 @@ func main() {
 - Document all endpoints with request/response schemas
 - Security schemes (Bearer JWT)
 - Add swagger annotations to handlers
-- Generate: `swag init -g cmd/api/main.go`
+- Generate: `swag init -g src/main.go`
 - Serve at `/swagger/index.html`
 
 ### 3. Pagination & Sorting for Tasks API
-**Implementation**: Modify `internal/handlers/task_handler.go` List method
+**Implementation**: Modify `src/handlers/task_handler.go` List method
 - Accept query params: `page`, `limit`, `sort_by`, `order`
 - Default: page=1, limit=10, sort_by=created_at, order=desc
 - Implement in repository with SQL LIMIT, OFFSET, ORDER BY
@@ -2063,5 +2061,3 @@ Your Phase 1 implementation is complete when:
 *End of Phase 1 Implementation Plan*
 
 **Note**: For complete code implementations of Phases 4-9, refer to the conversation history or request detailed code for specific components.
-
-

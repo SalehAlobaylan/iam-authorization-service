@@ -1,0 +1,25 @@
+env: development
+
+server:
+  host: localhost
+  port: "8080"
+
+database:
+  url: postgres://taskmanager:password123@localhost:5433/taskmanager?sslmode=disable
+
+jwt:
+  secret: your-secret-key-change-in-production
+  access_token_ttl: 3600
+  refresh_token_ttl: 3600
+
+
+
+
+
+
+
+
+
+
+
+

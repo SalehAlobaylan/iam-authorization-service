@@ -31,6 +31,7 @@ go.work.sum
 
 # Cache directories
 .cache/
+.gocache/
 /frontend/node_modules
 /frontend/build
 /frontend

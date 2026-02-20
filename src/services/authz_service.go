@@ -54,14 +54,12 @@ func (s *AuthzService) HasPermission(claims *utils.AccessTokenClaims, resource, 
 	if s.IsAdmin(claims) {
 		return true
 	}
+	required := strings.ToLower(resource + ":" + action)
+	resourceWildcard := strings.ToLower(resource + ":*")
 	for _, perm := range claims.Permissions {
-		if !strings.EqualFold(perm.Resource, resource) {
-			continue
-		}
-		for _, allowedAction := range perm.Actions {
-			if strings.EqualFold(allowedAction, action) {
-				return true
-			}
+		normalized := strings.ToLower(strings.TrimSpace(perm))
+		if normalized == required || normalized == resourceWildcard || normalized == "*:*" {
+			return true
 		}
 	}
 	return false

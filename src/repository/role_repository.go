@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/yourusername/iam-authorization-service/src/models"
 	"github.com/yourusername/iam-authorization-service/src/utils"
@@ -63,6 +64,35 @@ func (r *RoleRepository) AssignRoleToUser(userID, roleID string) error {
 func (r *RoleRepository) RemoveRoleFromUser(userID, roleID string) error {
 	return r.db.Where("user_id = ? AND role_id = ?", userID, roleID).
 		Delete(&models.UserRole{}).Error
+}
+
+// ReplaceUserRoles replaces all role mappings for a user in one transaction.
+func (r *RoleRepository) ReplaceUserRoles(userID string, roleIDs []string) error {
+	userUUID, err := utils.ParseUUID(userID)
+	if err != nil {
+		return err
+	}
+
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userUUID).Delete(&models.UserRole{}).Error; err != nil {
+			return err
+		}
+		for _, roleID := range roleIDs {
+			roleUUID, parseErr := utils.ParseUUID(roleID)
+			if parseErr != nil {
+				return parseErr
+			}
+			userRole := models.UserRole{
+				UserID:     userUUID,
+				RoleID:     roleUUID,
+				AssignedAt: time.Now(),
+			}
+			if err := tx.Create(&userRole).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // GetAll returns all roles in the system.

@@ -87,3 +87,12 @@ func (r *UserRepository) GetAll() ([]models.User, error) {
 	}
 	return users, nil
 }
+
+// GetAllByTenant retrieves all users for a specific tenant.
+func (r *UserRepository) GetAllByTenant(tenantID string) ([]models.User, error) {
+	var users []models.User
+	if err := r.db.Where("tenant_id = ?", tenantID).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}

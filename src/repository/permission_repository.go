@@ -1,6 +1,9 @@
 package repository
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/yourusername/iam-authorization-service/src/models"
 	"github.com/yourusername/iam-authorization-service/src/utils"
 
@@ -37,6 +40,79 @@ func (r *PermissionRepository) GetUserPermissions(userID string) ([]models.Permi
 		Joins("JOIN role_permissions ON role_permissions.permission_id = permissions.id").
 		Joins("JOIN user_roles ON user_roles.role_id = role_permissions.role_id").
 		Where("user_roles.user_id = ?", userID).
+		Distinct().
+		Find(&permissions).Error; err != nil {
+		return nil, err
+	}
+
+	var directPermissions []models.Permission
+	if err := r.db.
+		Joins("JOIN user_permissions ON user_permissions.permission_id = permissions.id").
+		Where("user_permissions.user_id = ?", userID).
+		Distinct().
+		Find(&directPermissions).Error; err != nil {
+		return nil, err
+	}
+
+	merged := make(map[string]models.Permission, len(permissions)+len(directPermissions))
+	for _, permission := range permissions {
+		merged[permission.ID.String()] = permission
+	}
+	for _, permission := range directPermissions {
+		merged[permission.ID.String()] = permission
+	}
+
+	result := make([]models.Permission, 0, len(merged))
+	for _, permission := range merged {
+		result = append(result, permission)
+	}
+	return result, nil
+}
+
+// GetByResourceAction retrieves a permission by resource/action key.
+func (r *PermissionRepository) GetByResourceAction(resource, action string) (*models.Permission, error) {
+	var permission models.Permission
+	if err := r.db.Where("resource = ? AND action = ?", resource, action).First(&permission).Error; err != nil {
+		return nil, err
+	}
+	return &permission, nil
+}
+
+// ReplaceUserPermissions replaces direct user permission mappings.
+func (r *PermissionRepository) ReplaceUserPermissions(userID string, permissionIDs []string) error {
+	userUUID, err := utils.ParseUUID(userID)
+	if err != nil {
+		return err
+	}
+
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userUUID).Delete(&models.UserPermission{}).Error; err != nil {
+			return err
+		}
+		for _, permissionID := range permissionIDs {
+			permissionUUID, parseErr := utils.ParseUUID(permissionID)
+			if parseErr != nil {
+				return parseErr
+			}
+			userPermission := models.UserPermission{
+				UserID:       userUUID,
+				PermissionID: permissionUUID,
+				AssignedAt:   time.Now(),
+			}
+			if err := tx.Create(&userPermission).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// GetUserDirectPermissions retrieves direct permissions attached to a user.
+func (r *PermissionRepository) GetUserDirectPermissions(userID string) ([]models.Permission, error) {
+	var permissions []models.Permission
+	if err := r.db.
+		Joins("JOIN user_permissions ON user_permissions.permission_id = permissions.id").
+		Where("user_permissions.user_id = ?", userID).
 		Distinct().
 		Find(&permissions).Error; err != nil {
 		return nil, err
@@ -83,5 +159,8 @@ func (r *PermissionRepository) RemovePermissionFromRole(roleID, permissionID str
 
 // Create inserts a new permission row.
 func (r *PermissionRepository) Create(permission *models.Permission) error {
+	if permission.Resource == "" || permission.Action == "" {
+		return fmt.Errorf("resource and action are required")
+	}
 	return r.db.Create(permission).Error
 }

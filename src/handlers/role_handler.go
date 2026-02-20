@@ -27,6 +27,8 @@ func (h *RoleHandler) GetMyAccess(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"user_id":      claims.UserID,
 		"email":        claims.Email,
+		"tenant_id":    claims.TenantID,
+		"role":         claims.Role,
 		"roles":        claims.Roles,
 		"permissions":  claims.Permissions,
 		"is_admin":     claims.IsAdmin,

@@ -12,6 +12,7 @@ type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
 	JWT      JWTConfig      `yaml:"jwt"`
+	Tenancy  TenancyConfig  `yaml:"tenancy"`
 }
 
 type ServerConfig struct {
@@ -33,6 +34,12 @@ type JWTConfig struct {
 	Secret          string `yaml:"secret"`
 	AccessTokenTTL  int    `yaml:"access_token_ttl"`  // in seconds
 	RefreshTokenTTL int    `yaml:"refresh_token_ttl"` // in seconds
+	Issuer          string `yaml:"issuer"`
+	Audience        string `yaml:"audience"`
+}
+
+type TenancyConfig struct {
+	DefaultTenantID string `yaml:"default_tenant_id"`
 }
 
 /*
@@ -95,8 +102,24 @@ func Load() (*Config, error) {
 	if jwtSecret := os.Getenv("JWT_SECRET"); jwtSecret != "" {
 		cfg.JWT.Secret = jwtSecret
 	}
+	if jwtIssuer := os.Getenv("JWT_ISSUER"); jwtIssuer != "" {
+		cfg.JWT.Issuer = jwtIssuer
+	}
+	if jwtAudience := os.Getenv("JWT_AUDIENCE"); jwtAudience != "" {
+		cfg.JWT.Audience = jwtAudience
+	}
+	if defaultTenantID := os.Getenv("DEFAULT_TENANT_ID"); defaultTenantID != "" {
+		cfg.Tenancy.DefaultTenantID = defaultTenantID
+	}
 	if env := os.Getenv("ENV"); env != "" {
 		cfg.Env = env
+	}
+
+	if cfg.JWT.Issuer == "" {
+		cfg.JWT.Issuer = "iam-authorization-service"
+	}
+	if cfg.Tenancy.DefaultTenantID == "" {
+		cfg.Tenancy.DefaultTenantID = "default"
 	}
 
 	return &cfg, nil

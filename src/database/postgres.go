@@ -58,6 +58,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Permission{},
 		&models.UserRole{},
 		&models.RolePermission{},
+		&models.UserPermission{},
 		&models.Task{},
 	)
 }

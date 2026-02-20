@@ -24,7 +24,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authService.Register(req.Username, req.Email, req.Password)
+	user, err := h.authService.Register(req.Username, req.Email, req.Password, req.TenantID)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -34,6 +34,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		"id":         user.ID,
 		"username":   user.Username,
 		"email":      user.Email,
+		"tenant_id":  user.TenantID,
 		"created_at": user.CreatedAt,
 	})
 }

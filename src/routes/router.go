@@ -17,7 +17,7 @@ func setupRoutes(router *gin.Engine, h *Handlers, _ *Services, cfg *config.Confi
 	auth.POST("/refresh", h.Auth.Refresh)
 
 	protected := v1.Group("")
-	protected.Use(middleware.Authenticate(cfg.JWT.Secret))
+	protected.Use(middleware.AuthenticateWithClaims(cfg.JWT.Secret, cfg.JWT.Issuer, cfg.JWT.Audience))
 	protected.POST("/auth/logout", h.Auth.Logout)
 
 	tasks := protected.Group("/tasks")
@@ -38,6 +38,15 @@ func setupRoutes(router *gin.Engine, h *Handlers, _ *Services, cfg *config.Confi
 	roles.GET("/me", h.Role.GetMyAccess)
 	roles.POST("/assign", middleware.RequireRole("admin"), h.Role.AssignRole)
 	roles.GET("/users/:user_id", middleware.RequirePermission("user", "read"), h.Role.GetUserRoles)
+
+	iam := protected.Group("/iam")
+	iam.Use(middleware.RequirePermission("iam", "read"))
+	iam.GET("/roles", h.IAM.ListRoles)
+	iam.GET("/permissions", h.IAM.ListPermissions)
+	iam.GET("/users", h.IAM.ListUsers)
+	iam.GET("/users/:user_id/roles", h.IAM.GetUserRoles)
+	iam.PUT("/users/:user_id/roles", middleware.RequirePermission("iam", "write"), h.IAM.UpdateUserRoles)
+	iam.PUT("/users/:user_id/permissions", middleware.RequirePermission("iam", "write"), h.IAM.UpdateUserPermissions)
 
 	if os.Getenv("ALLOW_SEED_ENDPOINT") == "true" {
 		admin := protected.Group("/admin")

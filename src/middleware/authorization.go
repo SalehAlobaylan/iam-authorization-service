@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -40,15 +41,12 @@ func RequirePermission(resource, action string) gin.HandlerFunc {
 			return
 		}
 
+		required := strings.ToLower(resource + ":" + action)
 		for _, permission := range claims.Permissions {
-			if permission.Resource != resource {
-				continue
-			}
-			for _, allowedAction := range permission.Actions {
-				if allowedAction == action {
-					c.Next()
-					return
-				}
+			p := strings.ToLower(strings.TrimSpace(permission))
+			if p == required || p == strings.ToLower(resource)+":*" || p == "*:*" {
+				c.Next()
+				return
 			}
 		}
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient permission"})

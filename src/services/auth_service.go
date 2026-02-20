@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -35,7 +36,7 @@ func NewAuthService(
 	}
 }
 
-func (s *AuthService) Register(username, email, password string) (*models.User, error) {
+func (s *AuthService) Register(username, email, password, tenantID string) (*models.User, error) {
 	if err := utils.ValidateEmail(email); err != nil {
 		return nil, utils.ValidationError(err.Error())
 	}
@@ -72,7 +73,14 @@ func (s *AuthService) Register(username, email, password string) (*models.User, 
 	user := &models.User{
 		Username:     uniqueUsername,
 		Email:        email,
+		TenantID:     strings.TrimSpace(tenantID),
 		PasswordHash: hashedPassword,
+	}
+	if user.TenantID == "" {
+		user.TenantID = strings.TrimSpace(s.config.Tenancy.DefaultTenantID)
+	}
+	if user.TenantID == "" {
+		user.TenantID = "default"
 	}
 	if err := s.userRepo.Create(user); err != nil {
 		return nil, utils.InternalServerError("failed to create user")
@@ -113,14 +121,27 @@ func (s *AuthService) Login(email, password string) (*models.TokenPair, error) {
 	for _, role := range roles {
 		roleNames = append(roleNames, role.Name)
 	}
+	roleNames = normalizeRoles(roleNames)
 
 	allPermissions, err := s.permRepo.GetUserPermissions(user.ID.String())
 	if err != nil {
 		return nil, utils.InternalServerError("failed to load user permissions")
 	}
 	permissionClaims := buildPermissionClaims(allPermissions)
+	primaryRole := derivePrimaryRole(roleNames)
 
-	accessToken, err := utils.GenerateAccessToken(*user, roleNames, permissionClaims, s.config.JWT.Secret, s.config.JWT.AccessTokenTTL)
+	accessToken, err := utils.GenerateAccessToken(
+		user.ID.String(),
+		user.Email,
+		user.TenantID,
+		primaryRole,
+		roleNames,
+		permissionClaims,
+		s.config.JWT.Secret,
+		s.config.JWT.AccessTokenTTL,
+		s.config.JWT.Issuer,
+		s.config.JWT.Audience,
+	)
 	if err != nil {
 		return nil, utils.InternalServerError("failed to generate access token")
 	}
@@ -167,14 +188,27 @@ func (s *AuthService) Refresh(refreshToken string) (*models.TokenPair, error) {
 	for _, role := range roles {
 		roleNames = append(roleNames, role.Name)
 	}
+	roleNames = normalizeRoles(roleNames)
 
 	allPermissions, err := s.permRepo.GetUserPermissions(user.ID.String())
 	if err != nil {
 		return nil, utils.InternalServerError("failed to load user permissions")
 	}
 	permissionClaims := buildPermissionClaims(allPermissions)
+	primaryRole := derivePrimaryRole(roleNames)
 
-	newAccessToken, err := utils.GenerateAccessToken(*user, roleNames, permissionClaims, s.config.JWT.Secret, s.config.JWT.AccessTokenTTL)
+	newAccessToken, err := utils.GenerateAccessToken(
+		user.ID.String(),
+		user.Email,
+		user.TenantID,
+		primaryRole,
+		roleNames,
+		permissionClaims,
+		s.config.JWT.Secret,
+		s.config.JWT.AccessTokenTTL,
+		s.config.JWT.Issuer,
+		s.config.JWT.Audience,
+	)
 	if err != nil {
 		return nil, utils.InternalServerError("failed to generate access token")
 	}
@@ -211,18 +245,52 @@ func (s *AuthService) Logout(refreshToken string) error {
 	return nil
 }
 
-func buildPermissionClaims(perms []models.Permission) []models.PermissionClaim {
-	permissionMap := make(map[string][]string)
+func buildPermissionClaims(perms []models.Permission) []string {
+	permissionMap := make(map[string]struct{})
 	for _, perm := range perms {
-		permissionMap[perm.Resource] = append(permissionMap[perm.Resource], perm.Action)
+		key := strings.ToLower(strings.TrimSpace(perm.Resource)) + ":" + strings.ToLower(strings.TrimSpace(perm.Action))
+		permissionMap[key] = struct{}{}
 	}
 
-	claims := make([]models.PermissionClaim, 0, len(permissionMap))
-	for resource, actions := range permissionMap {
-		claims = append(claims, models.PermissionClaim{
-			Resource: resource,
-			Actions:  actions,
-		})
+	claims := make([]string, 0, len(permissionMap))
+	for permission := range permissionMap {
+		claims = append(claims, permission)
 	}
+	sort.Strings(claims)
 	return claims
+}
+
+func derivePrimaryRole(roles []string) string {
+	priority := []string{"admin", "manager", "agent", "user"}
+	normalized := make(map[string]struct{}, len(roles))
+	for _, role := range roles {
+		normalized[strings.ToLower(strings.TrimSpace(role))] = struct{}{}
+	}
+	for _, role := range priority {
+		if _, ok := normalized[role]; ok {
+			return role
+		}
+	}
+	if len(roles) > 0 {
+		return strings.ToLower(strings.TrimSpace(roles[0]))
+	}
+	return "user"
+}
+
+func normalizeRoles(roles []string) []string {
+	seen := make(map[string]struct{}, len(roles))
+	normalized := make([]string, 0, len(roles))
+	for _, role := range roles {
+		name := strings.ToLower(strings.TrimSpace(role))
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		normalized = append(normalized, name)
+	}
+	sort.Strings(normalized)
+	return normalized
 }

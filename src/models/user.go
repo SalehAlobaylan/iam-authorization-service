@@ -14,15 +14,17 @@ type User struct {
 	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
 	Username     string         `json:"username" gorm:"size:255;not null;unique"`
 	Email        string         `json:"email" gorm:"size:255;not null;unique"`
+	TenantID     string         `json:"tenant_id" gorm:"size:64;not null;default:default;index"`
 	PasswordHash string         `json:"-" gorm:"size:255;not null;column:password"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 
 	// Associations
-	Tokens []Token `json:"-" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
-	Roles  []Role  `json:"-" gorm:"many2many:user_roles;"`
-	Tasks  []Task  `json:"-" gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE"`
+	Tokens      []Token      `json:"-" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
+	Roles       []Role       `json:"-" gorm:"many2many:user_roles;"`
+	Permissions []Permission `json:"-" gorm:"many2many:user_permissions;"`
+	Tasks       []Task       `json:"-" gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE"`
 }
 
 // TableName overrides the default table name used by GORM.
@@ -48,6 +50,7 @@ type RegisterRequest struct {
 	Username string `json:"username"`
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
+	TenantID string `json:"tenant_id,omitempty"`
 }
 
 // LoginRequest captures the request payload for user login.

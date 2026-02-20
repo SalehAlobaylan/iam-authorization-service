@@ -2,9 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"strings"
 	"time"
-
-	"github.com/yourusername/iam-authorization-service/src/models"
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
@@ -12,11 +11,13 @@ import (
 
 // AccessTokenClaims represents JWT access token claims with RBAC information.
 type AccessTokenClaims struct {
-	UserID      string                   `json:"user_id"`
-	Email       string                   `json:"email"`
-	Roles       []string                 `json:"roles"`
-	IsAdmin     bool                     `json:"is_admin"`
-	Permissions []models.PermissionClaim `json:"permissions"`
+	UserID      string   `json:"user_id"`
+	Email       string   `json:"email"`
+	TenantID    string   `json:"tenant_id"`
+	Role        string   `json:"role"`
+	Roles       []string `json:"roles"`
+	Permissions []string `json:"permissions"`
+	IsAdmin     bool     `json:"is_admin,omitempty"` // kept for compatibility
 	jwt.RegisteredClaims
 }
 
@@ -28,33 +29,48 @@ type AccessTokenClaims struct {
 //   - secret:     HMAC secret used to sign the token
 //   - ttl:        time-to-live in seconds
 func GenerateAccessToken(
-	user models.User,
+	userID string,
+	email string,
+	tenantID string,
+	primaryRole string,
 	roles []string,
-	permissions []models.PermissionClaim,
+	permissions []string,
 	secret string,
 	ttl int,
+	issuer string,
+	audience string,
 ) (string, error) {
+	now := time.Now()
+	jti, err := uuid.NewV4()
+	if err != nil {
+		return "", err
+	}
 	isAdmin := false
 	for _, r := range roles {
-		if r == "admin" {
+		if strings.EqualFold(r, "admin") {
 			isAdmin = true
 			break
 		}
 	}
 
-	now := time.Now()
 	claims := AccessTokenClaims{
-		UserID:      user.ID.String(),
-		Email:       user.Email,
+		UserID:      userID,
+		Email:       email,
+		TenantID:    tenantID,
+		Role:        primaryRole,
 		Roles:       roles,
-		IsAdmin:     isAdmin,
 		Permissions: permissions,
+		IsAdmin:     isAdmin,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(ttl) * time.Second)),
 			IssuedAt:  jwt.NewNumericDate(now),
-			Issuer:    "task-manager",
-			Subject:   user.ID.String(),
+			Issuer:    issuer,
+			Subject:   userID,
+			ID:        jti.String(),
 		},
+	}
+	if audience != "" {
+		claims.Audience = []string{audience}
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

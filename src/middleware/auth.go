@@ -11,6 +11,10 @@ import (
 const claimsContextKey = "access_claims"
 
 func Authenticate(secret string) gin.HandlerFunc {
+	return AuthenticateWithClaims(secret, "", "")
+}
+
+func AuthenticateWithClaims(secret, expectedIssuer, expectedAudience string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -28,6 +32,23 @@ func Authenticate(secret string) gin.HandlerFunc {
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired access token"})
 			return
+		}
+		if expectedIssuer != "" && !strings.EqualFold(claims.Issuer, expectedIssuer) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token issuer"})
+			return
+		}
+		if expectedAudience != "" {
+			audienceMatched := false
+			for _, audience := range claims.Audience {
+				if strings.EqualFold(audience, expectedAudience) {
+					audienceMatched = true
+					break
+				}
+			}
+			if !audienceMatched {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token audience"})
+				return
+			}
 		}
 
 		c.Set(claimsContextKey, claims)

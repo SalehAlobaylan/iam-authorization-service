@@ -67,6 +67,7 @@ func initRepositories(db *gorm.DB) *Repositories {
 
 type Services struct {
 	Auth  *services.AuthService
+	IAM   *services.IAMService
 	Authz *services.AuthzService
 	Task  *services.TaskService
 	User  *services.UserService
@@ -76,6 +77,7 @@ func initServices(repos *Repositories, cfg *config.Config) *Services {
 	authzSvc := services.NewAuthzService(repos.Role, repos.Permission)
 	return &Services{
 		Auth:  services.NewAuthService(repos.User, repos.Token, repos.Role, repos.Permission, cfg),
+		IAM:   services.NewIAMService(repos.User, repos.Role, repos.Permission),
 		Authz: authzSvc,
 		Task:  services.NewTaskService(repos.Task, authzSvc),
 		User:  services.NewUserService(repos.User, authzSvc),
@@ -84,6 +86,7 @@ func initServices(repos *Repositories, cfg *config.Config) *Services {
 
 type Handlers struct {
 	Auth  *handlers.AuthHandler
+	IAM   *handlers.IAMHandler
 	Task  *handlers.TaskHandler
 	User  *handlers.UserHandler
 	Role  *handlers.RoleHandler
@@ -93,6 +96,7 @@ type Handlers struct {
 func initHandlers(svcs *Services, db *gorm.DB) *Handlers {
 	return &Handlers{
 		Auth:  handlers.NewAuthHandler(svcs.Auth),
+		IAM:   handlers.NewIAMHandler(svcs.IAM, svcs.Authz),
 		Task:  handlers.NewTaskHandler(svcs.Task),
 		User:  handlers.NewUserHandler(svcs.User),
 		Role:  handlers.NewRoleHandler(svcs.Authz),

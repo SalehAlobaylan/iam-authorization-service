@@ -48,7 +48,7 @@ All application code is under `src/`:
 
 ## API Base URL
 
-- `http://localhost:8080/api/v1`
+- `http://localhost:4003/api/v1`
 
 ## Local DB Port
 

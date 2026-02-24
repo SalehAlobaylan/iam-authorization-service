@@ -2,7 +2,7 @@ env: development
 
 server:
   host: localhost
-  port: "8080"
+  port: "4003"
 
 database:
   url: postgres://taskmanager:password123@localhost:5433/taskmanager?sslmode=disable
@@ -16,7 +16,6 @@ jwt:
 
 tenancy:
   default_tenant_id: default
-
 
 
 

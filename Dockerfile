@@ -15,5 +15,5 @@ COPY --from=builder /taskify-api /usr/local/bin/taskify-api
 COPY src/config/config.yaml /app/src/config/config.yaml
 
 USER appuser
-EXPOSE 8080
+EXPOSE 4003
 CMD ["taskify-api"]

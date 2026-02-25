@@ -9,6 +9,10 @@ import (
 )
 
 func setupRoutes(router *gin.Engine, h *Handlers, _ *Services, cfg *config.Config) {
+	// Public endpoints - no authentication required
+	router.GET("/", h.Health.Welcome)
+	router.GET("/health", h.Health.Health)
+
 	v1 := router.Group("/api/v1")
 
 	auth := v1.Group("/auth")

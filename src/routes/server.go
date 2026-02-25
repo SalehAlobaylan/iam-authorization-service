@@ -85,21 +85,23 @@ func initServices(repos *Repositories, cfg *config.Config) *Services {
 }
 
 type Handlers struct {
-	Auth  *handlers.AuthHandler
-	IAM   *handlers.IAMHandler
-	Task  *handlers.TaskHandler
-	User  *handlers.UserHandler
-	Role  *handlers.RoleHandler
-	Admin *handlers.AdminHandler
+	Auth   *handlers.AuthHandler
+	IAM    *handlers.IAMHandler
+	Task   *handlers.TaskHandler
+	User   *handlers.UserHandler
+	Role   *handlers.RoleHandler
+	Admin  *handlers.AdminHandler
+	Health *handlers.HealthHandler
 }
 
 func initHandlers(svcs *Services, db *gorm.DB) *Handlers {
 	return &Handlers{
-		Auth:  handlers.NewAuthHandler(svcs.Auth),
-		IAM:   handlers.NewIAMHandler(svcs.IAM, svcs.Authz),
-		Task:  handlers.NewTaskHandler(svcs.Task),
-		User:  handlers.NewUserHandler(svcs.User),
-		Role:  handlers.NewRoleHandler(svcs.Authz),
-		Admin: handlers.NewAdminHandler(db),
+		Auth:   handlers.NewAuthHandler(svcs.Auth),
+		IAM:    handlers.NewIAMHandler(svcs.IAM, svcs.Authz),
+		Task:   handlers.NewTaskHandler(svcs.Task),
+		User:   handlers.NewUserHandler(svcs.User),
+		Role:   handlers.NewRoleHandler(svcs.Authz),
+		Admin:  handlers.NewAdminHandler(db),
+		Health: handlers.NewHealthHandler(db),
 	}
 }

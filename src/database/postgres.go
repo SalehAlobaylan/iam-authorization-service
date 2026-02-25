@@ -26,7 +26,10 @@ func NewPostgres(cfg config.DatabaseConfig) (*gorm.DB, error) {
 		Logger: logger.Default.LogMode(logger.Info),
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), gormConfig)
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		DSN:                  dsn,
+		PreferSimpleProtocol: cfg.PreferSimpleProtocol,
+	}), gormConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -44,7 +47,11 @@ func NewPostgres(cfg config.DatabaseConfig) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	log.Println("Database connected successfully")
+	if cfg.PreferSimpleProtocol {
+		log.Println("Database connected successfully (simple protocol enabled)")
+	} else {
+		log.Println("Database connected successfully")
+	}
 	return db, nil
 }
 

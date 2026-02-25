@@ -37,6 +37,12 @@ All application code is under `src/`:
 4. Start API:
    - `make run`
 
+### Supabase Pooler Note
+
+If you use Supabase transaction pooler (`*.pooler.supabase.com:6543`), enable simple protocol to avoid prepared-statement conflicts:
+
+- `DB_PREFER_SIMPLE_PROTOCOL=true`
+
 ## Docker
 
 - Start all services:

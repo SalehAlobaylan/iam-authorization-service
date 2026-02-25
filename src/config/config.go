@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -21,13 +23,14 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
-	URL      string `yaml:"url"`
-	Host     string `yaml:"host"`
-	Port     string `yaml:"port"`
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-	DBName   string `yaml:"dbname"`
-	SSLMode  string `yaml:"sslmode"`
+	URL                  string `yaml:"url"`
+	Host                 string `yaml:"host"`
+	Port                 string `yaml:"port"`
+	User                 string `yaml:"user"`
+	Password             string `yaml:"password"`
+	DBName               string `yaml:"dbname"`
+	SSLMode              string `yaml:"sslmode"`
+	PreferSimpleProtocol bool   `yaml:"prefer_simple_protocol"`
 }
 
 type JWTConfig struct {
@@ -99,6 +102,11 @@ func Load() (*Config, error) {
 	if dbSSL := os.Getenv("DB_SSLMODE"); dbSSL != "" {
 		cfg.Database.SSLMode = dbSSL
 	}
+	if simpleProtocol := os.Getenv("DB_PREFER_SIMPLE_PROTOCOL"); simpleProtocol != "" {
+		if value, parseErr := strconv.ParseBool(strings.TrimSpace(simpleProtocol)); parseErr == nil {
+			cfg.Database.PreferSimpleProtocol = value
+		}
+	}
 	if jwtSecret := os.Getenv("JWT_SECRET"); jwtSecret != "" {
 		cfg.JWT.Secret = jwtSecret
 	}
@@ -120,6 +128,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.Tenancy.DefaultTenantID == "" {
 		cfg.Tenancy.DefaultTenantID = "default"
+	}
+	if strings.Contains(cfg.Database.URL, "pooler.supabase.com:6543") {
+		cfg.Database.PreferSimpleProtocol = true
 	}
 
 	return &cfg, nil

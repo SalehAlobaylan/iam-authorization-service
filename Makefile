@@ -1,4 +1,9 @@
-DB_URL ?= postgres://taskmanager:password123@localhost:5433/taskmanager?sslmode=disable
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+
+DATABASE_URL ?= $(or $(DB_URL),postgres://taskmanager:password123@localhost:5433/taskmanager?sslmode=disable)
 
 .PHONY: run build test tidy migrate-up migrate-down seed docker-up docker-down docker-logs
 
@@ -15,13 +20,13 @@ tidy:
 	go mod tidy
 
 migrate-up:
-	migrate -path database-migrations/migrations -database "$(DB_URL)" up
+	migrate -path database-migrations/migrations -database "$(DATABASE_URL)" up
 
 migrate-down:
-	migrate -path database-migrations/migrations -database "$(DB_URL)" down 1
+	migrate -path database-migrations/migrations -database "$(DATABASE_URL)" down 1
 
 seed:
-	psql "$(DB_URL)" -f scripts/seed.sql
+	psql "$(DATABASE_URL)" -f scripts/seed.sql
 
 docker-up:
 	docker compose up -d --build

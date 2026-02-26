@@ -49,7 +49,7 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 type RegisterRequest struct {
 	Username string `json:"username"`
 	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
+	Password string `json:"password" binding:"required,min=4"`
 	TenantID string `json:"tenant_id,omitempty"`
 }
 

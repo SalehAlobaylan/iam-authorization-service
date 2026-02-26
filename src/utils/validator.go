@@ -19,10 +19,10 @@ func ValidateEmail(email string) error {
 	return nil
 }
 
-// ValidatePassword enforces a basic password policy (min length).
+// ValidatePassword enforces a temporary relaxed password policy (min length).
 func ValidatePassword(password string) error {
-	if len(password) < 8 {
-		return fmt.Errorf("password must be at least 8 characters long")
+	if len(password) < 4 {
+		return fmt.Errorf("password must be at least 4 characters long")
 	}
 	return nil
 }

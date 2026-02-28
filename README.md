@@ -1,6 +1,6 @@
 # iam-authorization-service
 
-Taskify Phase 1 backend implemented with Go, Gin, PostgreSQL, JWT, RBAC, and ABAC.
+Taskify backend implemented with Go, Gin, PostgreSQL, JWT, RBAC, and ABAC.
 
 ## Structure
 

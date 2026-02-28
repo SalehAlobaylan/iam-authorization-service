@@ -1,6 +1,10 @@
 # iam-authorization-service
 
-Taskify backend implemented with Go, Gin, PostgreSQL, JWT, RBAC, and ABAC.
+Taskify backend implemented with Go, Gin, PostgreSQL, JWT, RBAC, and ABAC. Powers Platform-Console auth when `NEXT_PUBLIC_IAM_BASE_URL` is set.
+
+## Platform-Console Integration
+
+Platform-Console is the admin dashboard for platform operations. It triggers ingestion pipelines (RSS, YouTube, podcast, etc.), manages content sources, and monitors content status. Console uses IAM for authentication when `NEXT_PUBLIC_AUTH_MODE` is `iam`. Set `NEXT_PUBLIC_IAM_BASE_URL=http://localhost:4003` in Console's env. Console calls IAM for login, register, refresh, and `GET /roles/me` (user + roles + permissions).
 
 ## Structure
 
@@ -24,6 +28,7 @@ All application code is under `src/`:
 - Refresh token rotation with persistence in `tokens` table
 - RBAC/ABAC authorization on protected endpoints
 - Task CRUD with ownership rules (admin can access all)
+- Profile view and update (own profile)
 - Seed support for default roles, permissions, and admin mapping
 
 ## Run Locally
@@ -67,6 +72,7 @@ If you use Supabase transaction pooler (`*.pooler.supabase.com:6543`), enable si
 - `POST /auth/refresh`
 - `POST /auth/logout`
 - `GET /users/profile`
+- `PUT /users/profile`
 - `GET /users`
 - `DELETE /users/:user_id`
 - `POST /tasks`

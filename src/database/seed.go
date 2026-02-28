@@ -134,6 +134,7 @@ func seedRolePermissions(db *gorm.DB) error {
 			"profile:read":  true,
 			"profile:write": true,
 			"task:read":     true,
+			"task:write":    true,
 		},
 		"agent": {
 			"profile:read":  true,

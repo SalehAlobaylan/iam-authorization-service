@@ -36,6 +36,7 @@ func setupRoutes(router *gin.Engine, h *Handlers, _ *Services, cfg *config.Confi
 	users.DELETE("/:user_id", middleware.RequirePermission("user", "delete"), h.User.DeleteUser)
 	users.GET("/:user_id/tasks", middleware.RequirePermission("task", "read"), h.Task.GetTasksByUser)
 	users.GET("/profile", middleware.RequirePermission("profile", "read"), h.User.GetUserProfile)
+	users.PUT("/profile", middleware.RequirePermission("profile", "write"), h.User.UpdateProfile)
 	users.GET("/profile/:user_id", middleware.RequirePermission("profile", "read"), h.User.GetUserProfileByUserID)
 
 	roles := protected.Group("/roles")

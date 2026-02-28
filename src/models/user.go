@@ -65,3 +65,9 @@ type LoginResponse struct {
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int    `json:"expires_in"`
 }
+
+// UpdateProfileRequest captures the fields a user may update on their own profile.
+// All fields are optional; only non-nil values are applied.
+type UpdateProfileRequest struct {
+	Username *string `json:"username,omitempty"`
+}

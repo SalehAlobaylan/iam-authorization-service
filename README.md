@@ -3,7 +3,7 @@
 Taskify backend implemented with Go, Gin, PostgreSQL, JWT, RBAC, and ABAC. Powers Platform-Console auth when `NEXT_PUBLIC_IAM_BASE_URL` is set.
 
 ## Platform-Console Integration
-
+      https://wahb-console.vercel.app/
 Platform-Console is the admin dashboard for platform operations. It triggers ingestion pipelines (RSS, YouTube, podcast, etc.), manages content sources, and monitors content status. Console uses IAM for authentication when `NEXT_PUBLIC_AUTH_MODE` is `iam`. Set `NEXT_PUBLIC_IAM_BASE_URL=http://localhost:4003` in Console's env. Console calls IAM for login, register, refresh, and `GET /roles/me` (user + roles + permissions).
 
 ## Structure

@@ -47,11 +47,12 @@ func Seed(db *gorm.DB) error {
 	return nil
 }
 
-// seedRoles ensures baseline roles exist (user, agent, manager, admin).
+// seedRoles ensures baseline roles exist (user, agent, editor, manager, admin).
 func seedRoles(db *gorm.DB) error {
 	defaultRoles := []models.Role{
 		{ID: uuid.FromStringOrNil("11111111-1111-1111-1111-111111111111"), Name: "user", Description: "Regular user with basic permissions"},
 		{ID: uuid.FromStringOrNil("22222222-2222-2222-2222-222222222222"), Name: "agent", Description: "Agent role with operational permissions"},
+		{ID: uuid.FromStringOrNil("22222222-2222-2222-2222-222222222223"), Name: "editor", Description: "Content editor with publishing permissions"},
 		{ID: uuid.FromStringOrNil("33333333-3333-3333-3333-333333333333"), Name: "manager", Description: "Manager role with elevated operational permissions"},
 		{ID: uuid.FromStringOrNil("44444444-4444-4444-4444-444444444444"), Name: "admin", Description: "Administrator with full access"},
 	}
@@ -83,20 +84,19 @@ func seedPermissions(db *gorm.DB) error {
 		{"66666666-6666-6666-6666-666666666661", "user", "read", "View users"},
 		{"66666666-6666-6666-6666-666666666662", "user", "write", "Update users"},
 		{"66666666-6666-6666-6666-666666666663", "user", "delete", "Delete users"},
-		{"77777777-7777-7777-7777-777777777771", "task", "read", "View tasks"},
-		{"77777777-7777-7777-7777-777777777772", "task", "write", "Create/Update tasks"},
-		{"77777777-7777-7777-7777-777777777773", "task", "delete", "Delete tasks"},
 		{"88888888-8888-8888-8888-888888888881", "source", "read", "View content sources"},
 		{"88888888-8888-8888-8888-888888888882", "source", "write", "Manage content sources"},
 		{"88888888-8888-8888-8888-888888888883", "source", "delete", "Delete content sources"},
 		{"99999999-9999-9999-9999-999999999991", "content", "read", "View content items"},
 		{"99999999-9999-9999-9999-999999999992", "content", "write", "Manage content items"},
 		{"99999999-9999-9999-9999-999999999993", "content", "delete", "Delete content items"},
-		{"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1", "crm", "read", "View CRM resources"},
-		{"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2", "crm", "write", "Manage CRM resources"},
-		{"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3", "crm", "delete", "Delete CRM resources"},
+		{"99999999-9999-9999-9999-999999999994", "content", "publish", "Publish content items"},
 		{"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb1", "iam", "read", "View IAM users/roles/permissions"},
 		{"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbb2", "iam", "write", "Manage IAM users/roles/permissions"},
+		{"cccccccc-cccc-cccc-cccc-ccccccccccc1", "feed", "read", "View feeds"},
+		{"cccccccc-cccc-cccc-cccc-ccccccccccc2", "feed", "manage", "Manage feed configuration"},
+		{"dddddddd-dddd-dddd-dddd-ddddddddddd1", "aggregation", "read", "View aggregation jobs"},
+		{"dddddddd-dddd-dddd-dddd-ddddddddddd2", "aggregation", "manage", "Manage aggregation jobs"},
 	}
 	for _, it := range items {
 		var existing models.Permission
@@ -133,33 +133,38 @@ func seedRolePermissions(db *gorm.DB) error {
 		"user": {
 			"profile:read":  true,
 			"profile:write": true,
-			"task:read":     true,
-			"task:write":    true,
+			"feed:read":     true,
 		},
 		"agent": {
 			"profile:read":  true,
 			"profile:write": true,
-			"task:read":     true,
-			"task:write":    true,
 			"source:read":   true,
 			"content:read":  true,
-			"crm:read":      true,
-			"crm:write":     true,
+			"feed:read":     true,
+		},
+		"editor": {
+			"profile:read":    true,
+			"profile:write":   true,
+			"source:read":     true,
+			"content:read":    true,
+			"content:write":   true,
+			"content:publish": true,
+			"feed:read":       true,
 		},
 		"manager": {
-			"profile:read":  true,
-			"profile:write": true,
-			"task:read":     true,
-			"task:write":    true,
-			"task:delete":   true,
-			"user:read":     true,
-			"source:read":   true,
-			"source:write":  true,
-			"content:read":  true,
-			"content:write": true,
-			"crm:read":      true,
-			"crm:write":     true,
-			"crm:delete":    true,
+			"profile:read":       true,
+			"profile:write":      true,
+			"user:read":          true,
+			"source:read":        true,
+			"source:write":       true,
+			"content:read":       true,
+			"content:write":      true,
+			"content:delete":     true,
+			"content:publish":    true,
+			"feed:read":          true,
+			"feed:manage":        true,
+			"aggregation:read":   true,
+			"aggregation:manage": true,
 		},
 	}
 	for _, role := range roles {

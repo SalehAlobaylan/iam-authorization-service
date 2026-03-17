@@ -15,6 +15,17 @@ type Config struct {
 	Database DatabaseConfig `yaml:"database"`
 	JWT      JWTConfig      `yaml:"jwt"`
 	Tenancy  TenancyConfig  `yaml:"tenancy"`
+	Email    EmailConfig    `yaml:"email"`
+}
+
+type EmailConfig struct {
+	SMTPHost             string `yaml:"smtp_host"`
+	SMTPPort             string `yaml:"smtp_port"`
+	SMTPPassword         string `yaml:"smtp_password"`
+	FromAddress          string `yaml:"from_address"`
+	VerificationBaseURL  string `yaml:"verification_base_url"`
+	ResetBaseURL         string `yaml:"reset_base_url"`
+	RequireVerification  bool   `yaml:"require_verification"`
 }
 
 type ServerConfig struct {
@@ -121,6 +132,31 @@ func Load() (*Config, error) {
 	}
 	if env := os.Getenv("ENV"); env != "" {
 		cfg.Env = env
+	}
+
+	// Email config overrides
+	if smtpHost := os.Getenv("SMTP_HOST"); smtpHost != "" {
+		cfg.Email.SMTPHost = smtpHost
+	}
+	if smtpPort := os.Getenv("SMTP_PORT"); smtpPort != "" {
+		cfg.Email.SMTPPort = smtpPort
+	}
+	if smtpPass := os.Getenv("SMTP_PASSWORD"); smtpPass != "" {
+		cfg.Email.SMTPPassword = smtpPass
+	}
+	if fromAddr := os.Getenv("EMAIL_FROM"); fromAddr != "" {
+		cfg.Email.FromAddress = fromAddr
+	}
+	if verifyURL := os.Getenv("EMAIL_VERIFICATION_BASE_URL"); verifyURL != "" {
+		cfg.Email.VerificationBaseURL = verifyURL
+	}
+	if resetURL := os.Getenv("EMAIL_RESET_BASE_URL"); resetURL != "" {
+		cfg.Email.ResetBaseURL = resetURL
+	}
+	if requireVerify := os.Getenv("REQUIRE_EMAIL_VERIFICATION"); requireVerify != "" {
+		if value, parseErr := strconv.ParseBool(strings.TrimSpace(requireVerify)); parseErr == nil {
+			cfg.Email.RequireVerification = value
+		}
 	}
 
 	if cfg.JWT.Issuer == "" {

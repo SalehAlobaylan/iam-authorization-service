@@ -8,15 +8,15 @@ import (
 )
 
 // User represents an application user persisted in the "users" table.
-// It stores a hashed password (never exposed via JSON) and tracks
-// associations to tokens, roles, and tasks for RBAC and ownership.
 type User struct {
 	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
 	Username     string         `json:"username" gorm:"size:255;not null;unique"`
 	Email        string         `json:"email" gorm:"size:255;not null;unique"`
 	TenantID     string         `json:"tenant_id" gorm:"size:64;not null;default:default;index"`
-	PasswordHash string         `json:"-" gorm:"size:255;not null;column:password"`
-	CreatedAt    time.Time      `json:"created_at"`
+	PasswordHash    string         `json:"-" gorm:"size:255;not null;column:password"`
+	EmailVerified   bool           `json:"email_verified" gorm:"default:false"`
+	EmailVerifiedAt *time.Time     `json:"email_verified_at"`
+	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 
@@ -24,7 +24,6 @@ type User struct {
 	Tokens      []Token      `json:"-" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 	Roles       []Role       `json:"-" gorm:"many2many:user_roles;"`
 	Permissions []Permission `json:"-" gorm:"many2many:user_permissions;"`
-	Tasks       []Task       `json:"-" gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE"`
 }
 
 // TableName overrides the default table name used by GORM.

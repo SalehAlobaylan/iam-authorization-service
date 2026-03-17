@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -13,11 +14,12 @@ import (
 )
 
 type AuthService struct {
-	userRepo  *repository.UserRepository
-	tokenRepo *repository.TokenRepository
-	roleRepo  *repository.RoleRepository
-	permRepo  *repository.PermissionRepository
-	config    *config.Config
+	userRepo     *repository.UserRepository
+	tokenRepo    *repository.TokenRepository
+	roleRepo     *repository.RoleRepository
+	permRepo     *repository.PermissionRepository
+	config       *config.Config
+	verifySvc    *VerificationService
 }
 
 func NewAuthService(
@@ -34,6 +36,11 @@ func NewAuthService(
 		permRepo:  permRepo,
 		config:    cfg,
 	}
+}
+
+// SetVerificationService sets the verification service (called after construction to avoid circular deps).
+func (s *AuthService) SetVerificationService(v *VerificationService) {
+	s.verifySvc = v
 }
 
 func (s *AuthService) Register(username, email, password, tenantID string) (*models.User, error) {
@@ -98,6 +105,13 @@ func (s *AuthService) Register(username, email, password, tenantID string) (*mod
 	}
 	if err := s.roleRepo.AssignRoleToUser(user.ID.String(), defaultRole.ID.String()); err != nil {
 		return nil, utils.InternalServerError("failed to assign default role")
+	}
+
+	// Send verification email (non-blocking — registration succeeds even if email fails)
+	if s.verifySvc != nil {
+		if err := s.verifySvc.SendVerification(user.ID.String(), user.Email); err != nil {
+			log.Printf("WARNING: failed to send verification email to %s: %v", user.Email, err)
+		}
 	}
 
 	user.PasswordHash = ""
@@ -261,7 +275,7 @@ func buildPermissionClaims(perms []models.Permission) []string {
 }
 
 func derivePrimaryRole(roles []string) string {
-	priority := []string{"admin", "manager", "agent", "user"}
+	priority := []string{"admin", "manager", "editor", "agent", "user"}
 	normalized := make(map[string]struct{}, len(roles))
 	for _, role := range roles {
 		normalized[strings.ToLower(strings.TrimSpace(role))] = struct{}{}

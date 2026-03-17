@@ -65,13 +65,6 @@ func (s *AuthzService) HasPermission(claims *utils.AccessTokenClaims, resource, 
 	return false
 }
 
-func (s *AuthzService) CanAccessTask(claims *utils.AccessTokenClaims, ownerID string) bool {
-	if claims == nil {
-		return false
-	}
-	return s.IsAdmin(claims) || claims.UserID == ownerID
-}
-
 func (s *AuthzService) CanAccessUser(claims *utils.AccessTokenClaims, targetUserID string) bool {
 	if claims == nil {
 		return false

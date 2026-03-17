@@ -18,6 +18,15 @@ jwt:
 tenancy:
   default_tenant_id: default
 
+email:
+  smtp_host: ""
+  smtp_port: "587"
+  smtp_password: ""
+  from_address: "noreply@wahb.dev"
+  verification_base_url: "http://localhost:3005"
+  reset_base_url: "http://localhost:3005"
+  require_verification: false
+
 
 
 

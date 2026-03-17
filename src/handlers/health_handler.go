@@ -53,11 +53,10 @@ func (h *HealthHandler) Welcome(c *gin.Context) {
 		"docs": gin.H{
 			"health":      "/health",
 			"api_base":    "/api/v1",
-			"auth":        "/api/v1/auth",
-			"users":       "/api/v1/users",
-			"tasks":       "/api/v1/tasks",
-			"roles":       "/api/v1/roles",
-			"iam":         "/api/v1/iam",
+			"auth":  "/api/v1/auth",
+			"users": "/api/v1/users",
+			"roles": "/api/v1/roles",
+			"iam":   "/api/v1/iam",
 		},
 	})
 }

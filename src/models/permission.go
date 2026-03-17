@@ -41,7 +41,7 @@ func (p *Permission) BeforeCreate(tx *gorm.DB) error {
 // into JWT access tokens. It groups all allowed actions for a given resource.
 // Example:
 //
-//	{ "resource": "task", "actions": ["read", "write", "delete"] }
+//	{ "resource": "content", "actions": ["read", "write", "publish"] }
 type PermissionClaim struct {
 	Resource string   `json:"resource"`
 	Actions  []string `json:"actions"`

@@ -43,28 +43,6 @@ func ValidateUsername(username string) error {
 	return nil
 }
 
-func ValidateTaskStatus(status string) error {
-	if status == "" {
-		return nil
-	}
-	valid := map[string]bool{"pending": true, "in_progress": true, "completed": true}
-	if !valid[status] {
-		return fmt.Errorf("invalid task status")
-	}
-	return nil
-}
-
-func ValidateTaskPriority(priority string) error {
-	if priority == "" {
-		return nil
-	}
-	valid := map[string]bool{"low": true, "medium": true, "high": true}
-	if !valid[priority] {
-		return fmt.Errorf("invalid task priority")
-	}
-	return nil
-}
-
 func NormalizeUsername(username, email string) string {
 	if username != "" {
 		return strings.ToLower(username)

@@ -48,60 +48,80 @@ func (s *Server) Run() error {
 }
 
 type Repositories struct {
-	User       *repository.UserRepository
-	Token      *repository.TokenRepository
-	Role       *repository.RoleRepository
-	Permission *repository.PermissionRepository
-	Task       *repository.TaskRepository
+	User          *repository.UserRepository
+	Token         *repository.TokenRepository
+	Role          *repository.RoleRepository
+	Permission    *repository.PermissionRepository
+	Verification  *repository.VerificationRepository
+	PasswordReset *repository.PasswordResetRepository
 }
 
 func initRepositories(db *gorm.DB) *Repositories {
 	return &Repositories{
-		User:       repository.NewUserRepository(db),
-		Token:      repository.NewTokenRepository(db),
-		Role:       repository.NewRoleRepository(db),
-		Permission: repository.NewPermissionRepository(db),
-		Task:       repository.NewTaskRepository(db),
+		User:          repository.NewUserRepository(db),
+		Token:         repository.NewTokenRepository(db),
+		Role:          repository.NewRoleRepository(db),
+		Permission:    repository.NewPermissionRepository(db),
+		Verification:  repository.NewVerificationRepository(db),
+		PasswordReset: repository.NewPasswordResetRepository(db),
 	}
 }
 
 type Services struct {
-	Auth  *services.AuthService
-	IAM   *services.IAMService
-	Authz *services.AuthzService
-	Task  *services.TaskService
-	User  *services.UserService
+	Auth          *services.AuthService
+	IAM           *services.IAMService
+	Authz         *services.AuthzService
+	User          *services.UserService
+	Verification  *services.VerificationService
+	PasswordReset *services.PasswordResetService
 }
 
 func initServices(repos *Repositories, cfg *config.Config) *Services {
 	authzSvc := services.NewAuthzService(repos.Role, repos.Permission)
+
+	var emailSender services.EmailSender
+	if cfg.Email.SMTPHost != "" {
+		emailSender = services.NewSMTPEmailSender(cfg.Email)
+	} else {
+		emailSender = services.NewLogEmailSender()
+	}
+
+	authSvc := services.NewAuthService(repos.User, repos.Token, repos.Role, repos.Permission, cfg)
+	verifySvc := services.NewVerificationService(repos.Verification, repos.User, emailSender, cfg)
+
+	// Wire verification into auth so registration triggers email verification
+	authSvc.SetVerificationService(verifySvc)
+
 	return &Services{
-		Auth:  services.NewAuthService(repos.User, repos.Token, repos.Role, repos.Permission, cfg),
-		IAM:   services.NewIAMService(repos.User, repos.Role, repos.Permission),
-		Authz: authzSvc,
-		Task:  services.NewTaskService(repos.Task, authzSvc),
-		User:  services.NewUserService(repos.User, authzSvc),
+		Auth:          authSvc,
+		IAM:           services.NewIAMService(repos.User, repos.Role, repos.Permission),
+		Authz:         authzSvc,
+		User:          services.NewUserService(repos.User, authzSvc),
+		Verification:  verifySvc,
+		PasswordReset: services.NewPasswordResetService(repos.PasswordReset, repos.User, emailSender, cfg),
 	}
 }
 
 type Handlers struct {
-	Auth   *handlers.AuthHandler
-	IAM    *handlers.IAMHandler
-	Task   *handlers.TaskHandler
-	User   *handlers.UserHandler
-	Role   *handlers.RoleHandler
-	Admin  *handlers.AdminHandler
-	Health *handlers.HealthHandler
+	Auth          *handlers.AuthHandler
+	IAM           *handlers.IAMHandler
+	User          *handlers.UserHandler
+	Role          *handlers.RoleHandler
+	Admin         *handlers.AdminHandler
+	Health        *handlers.HealthHandler
+	Verification  *handlers.VerificationHandler
+	PasswordReset *handlers.PasswordResetHandler
 }
 
 func initHandlers(svcs *Services, db *gorm.DB) *Handlers {
 	return &Handlers{
-		Auth:   handlers.NewAuthHandler(svcs.Auth),
-		IAM:    handlers.NewIAMHandler(svcs.IAM, svcs.Authz),
-		Task:   handlers.NewTaskHandler(svcs.Task),
-		User:   handlers.NewUserHandler(svcs.User),
-		Role:   handlers.NewRoleHandler(svcs.Authz),
-		Admin:  handlers.NewAdminHandler(db),
-		Health: handlers.NewHealthHandler(db),
+		Auth:          handlers.NewAuthHandler(svcs.Auth),
+		IAM:           handlers.NewIAMHandler(svcs.IAM, svcs.Authz),
+		User:          handlers.NewUserHandler(svcs.User),
+		Role:          handlers.NewRoleHandler(svcs.Authz),
+		Admin:         handlers.NewAdminHandler(db),
+		Health:        handlers.NewHealthHandler(db),
+		Verification:  handlers.NewVerificationHandler(svcs.Verification),
+		PasswordReset: handlers.NewPasswordResetHandler(svcs.PasswordReset),
 	}
 }

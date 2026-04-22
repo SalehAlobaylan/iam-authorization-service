@@ -23,6 +23,20 @@ func main() {
 		log.Fatalf("database connection failed: %v", err)
 	}
 
+	env := strings.ToLower(strings.TrimSpace(cfg.Env))
+	if env == "development" || env == "dev" || strings.EqualFold(os.Getenv("IAM_AUTO_MIGRATE"), "true") {
+		if err := database.AutoMigrate(db); err != nil {
+			log.Fatalf("database auto-migrate failed: %v", err)
+		}
+		log.Println("database auto-migrate completed")
+
+		if err := database.Seed(db); err != nil {
+			log.Printf("database seed failed: %v", err)
+		} else {
+			log.Println("database seed completed")
+		}
+	}
+
 	if os.Getenv("SEED_ON_STARTUP") == "true" {
 		if err := database.Seed(db); err != nil {
 			log.Printf("database seed failed: %v", err)

@@ -15,10 +15,12 @@ package database
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/yourusername/iam-authorization-service/src/models"
+	"github.com/yourusername/iam-authorization-service/src/utils"
 
 	"github.com/gofrs/uuid"
 	"gorm.io/gorm"
@@ -30,6 +32,10 @@ import (
 func Seed(db *gorm.DB) error {
 	if db == nil {
 		return fmt.Errorf("db is nil")
+	}
+
+	if err := ensureDefaultAdminUser(db); err != nil {
+		return err
 	}
 
 	if err := seedRoles(db); err != nil {
@@ -44,6 +50,76 @@ func Seed(db *gorm.DB) error {
 	if err := assignAdminRoleToDefaultUser(db); err != nil {
 		return err
 	}
+	return nil
+}
+
+func defaultAdminEmail() string {
+	email := strings.ToLower(strings.TrimSpace(os.Getenv("ADMIN_EMAIL")))
+	if email == "" {
+		email = "admin@gmail.com"
+	}
+	return email
+}
+
+func ensureDefaultAdminUser(db *gorm.DB) error {
+	email := defaultAdminEmail()
+	password := strings.TrimSpace(os.Getenv("ADMIN_PASSWORD"))
+	if password == "" {
+		password = "admin"
+	}
+	username := strings.TrimSpace(os.Getenv("ADMIN_USERNAME"))
+	if username == "" {
+		username = "admin"
+	}
+	tenantID := strings.TrimSpace(os.Getenv("DEFAULT_TENANT_ID"))
+	if tenantID == "" {
+		tenantID = "default"
+	}
+
+	var existing models.User
+	err := db.Where("email = ?", email).First(&existing).Error
+	if err == nil {
+		if cmpErr := utils.ComparePassword(existing.PasswordHash, password); cmpErr != nil {
+			hash, hashErr := utils.HashPassword(password)
+			if hashErr != nil {
+				return fmt.Errorf("hash default admin password: %w", hashErr)
+			}
+			if updateErr := db.Model(&models.User{}).
+				Where("id = ?", existing.ID).
+				Updates(map[string]interface{}{
+					"password":          hash,
+					"tenant_id":         tenantID,
+					"email_verified":    true,
+					"email_verified_at": time.Now(),
+				}).Error; updateErr != nil {
+				return fmt.Errorf("update default admin user password: %w", updateErr)
+			}
+		}
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("query default admin user: %w", err)
+	}
+
+	hash, err := utils.HashPassword(password)
+	if err != nil {
+		return fmt.Errorf("hash default admin password: %w", err)
+	}
+
+	now := time.Now()
+	user := models.User{
+		Username:        username,
+		Email:           email,
+		TenantID:        tenantID,
+		PasswordHash:    hash,
+		EmailVerified:   true,
+		EmailVerifiedAt: &now,
+	}
+
+	if err := db.Create(&user).Error; err != nil {
+		return fmt.Errorf("create default admin user: %w", err)
+	}
+
 	return nil
 }
 
@@ -197,9 +273,9 @@ func seedRolePermissions(db *gorm.DB) error {
 // admin user (lookup by email) when present. If no such user exists, it exits
 // silently.
 func assignAdminRoleToDefaultUser(db *gorm.DB) error {
-	// Existing admin inserted by SQL migration uses 'admin@gmail.com'
+	adminEmail := defaultAdminEmail()
 	var adminUser models.User
-	if err := db.Where("email = ?", "admin@gmail.com").First(&adminUser).Error; err != nil {
+	if err := db.Where("email = ?", adminEmail).First(&adminUser).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// No default admin user present; skip silently
 			return nil

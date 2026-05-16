@@ -164,6 +164,12 @@ func Load() (*Config, error) {
 	if cfg.JWT.Issuer == "" {
 		cfg.JWT.Issuer = "iam-authorization-service"
 	}
+	if cfg.JWT.AccessTokenTTL <= 0 {
+		cfg.JWT.AccessTokenTTL = 3600
+	}
+	if cfg.JWT.RefreshTokenTTL <= 0 {
+		cfg.JWT.RefreshTokenTTL = 30 * 24 * 3600
+	}
 	if cfg.Tenancy.DefaultTenantID == "" {
 		cfg.Tenancy.DefaultTenantID = "default"
 	}

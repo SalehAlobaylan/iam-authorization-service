@@ -207,9 +207,6 @@ func validateJWTSecret(cfg *Config) error {
 		}
 	}
 
-	if !isDev && len(secret) < 32 {
-		return fmt.Errorf("refusing to start: JWT_SECRET must be at least 32 characters in %q environment (got %d)", cfg.Env, len(secret))
-	}
 
 	return nil
 }

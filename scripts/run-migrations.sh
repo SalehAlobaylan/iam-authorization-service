@@ -6,6 +6,6 @@ if ! command -v migrate >/dev/null 2>&1; then
   exit 1
 fi
 
-DB_URL="${DB_URL:-postgres://taskmanager:password123@localhost:5432/taskmanager?sslmode=disable}"
+DB_URL="${DB_URL:-postgres://iam:password123@localhost:5433/iam?sslmode=disable}"
 
 migrate -path database-migrations/migrations -database "$DB_URL" up

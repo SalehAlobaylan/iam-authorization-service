@@ -3,15 +3,15 @@ services:
     image: postgres:16
     restart: always
     environment:
-      POSTGRES_USER: taskmanager
+      POSTGRES_USER: iam
       POSTGRES_PASSWORD: password123
-      POSTGRES_DB: taskmanager
+      POSTGRES_DB: iam
     ports:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U taskmanager -d taskmanager"]
+      test: ["CMD-SHELL", "pg_isready -U iam -d iam"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,7 +28,7 @@ services:
         "-path",
         "/migrations",
         "-database",
-        "postgres://taskmanager:password123@postgres:5432/taskmanager?sslmode=disable",
+        "postgres://iam:password123@postgres:5432/iam?sslmode=disable",
         "-verbose",
         "up"
       ]
@@ -40,11 +40,13 @@ services:
         condition: service_completed_successfully
     ports:
       - "4003:4003"
+    volumes:
+      - ./src/config/config.yaml:/app/src/config/config.yaml:ro
     environment:
       HOST: 0.0.0.0
       PORT: 4003
-      DATABASE_URL: postgres://taskmanager:password123@postgres:5432/taskmanager?sslmode=disable
-      JWT_SECRET: your-secret-key-change-this
+      DATABASE_URL: postgres://iam:password123@postgres:5432/iam?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set and must match the value used by CMS}
       SEED_ON_STARTUP: "true"
 
 volumes:

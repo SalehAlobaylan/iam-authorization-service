@@ -68,6 +68,32 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
+// ChangePasswordRequest carries the JSON payload for self-service password change.
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+func (h *UserHandler) ChangePassword(c *gin.Context) {
+	claims, err := claimsFromContext(c)
+	if err != nil {
+		respondError(c, utils.UnauthorizedError("missing auth context"))
+		return
+	}
+
+	var req changePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, utils.ValidationError("invalid request body"))
+		return
+	}
+
+	if svcErr := h.userService.ChangePassword(claims, req.CurrentPassword, req.NewPassword); svcErr != nil {
+		respondError(c, svcErr)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
 func (h *UserHandler) GetUsers(c *gin.Context) {
 	claims, err := claimsFromContext(c)
 	if err != nil {

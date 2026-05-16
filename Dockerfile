@@ -5,15 +5,17 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /taskify-api ./src
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /iam-service ./src
 
 FROM alpine:3.20
 WORKDIR /app
 RUN adduser -D -u 10001 appuser
 
-COPY --from=builder /taskify-api /usr/local/bin/taskify-api
-COPY src/config/config.yaml /app/src/config/config.yaml
+COPY --from=builder /iam-service /usr/local/bin/iam-service
+
+ENV HOST=0.0.0.0
+ENV PORT=4003
 
 USER appuser
 EXPOSE 4003
-CMD ["taskify-api"]
+CMD ["iam-service"]

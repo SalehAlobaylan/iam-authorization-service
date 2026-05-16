@@ -3,7 +3,7 @@ include .env
 export
 endif
 
-DATABASE_URL ?= $(or $(DB_URL),postgres://taskmanager:password123@localhost:5433/taskmanager?sslmode=disable)
+DATABASE_URL ?= $(or $(DB_URL),postgres://iam:password123@localhost:5433/iam?sslmode=disable)
 
 .PHONY: run build test tidy migrate-up migrate-down seed docker-up docker-down docker-logs
 

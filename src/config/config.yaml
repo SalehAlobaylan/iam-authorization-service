@@ -5,7 +5,7 @@ server:
   port: "4003"
 
 database:
-  url: postgres://taskmanager:password123@localhost:5433/taskmanager?sslmode=disable
+  url: postgres://iam:password123@localhost:5433/iam?sslmode=disable
   prefer_simple_protocol: false
 
 jwt:

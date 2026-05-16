@@ -75,14 +75,16 @@ func Load() (*Config, error) {
 		configPath = "src/config/config.yaml"
 	}
 
+	var cfg Config
 	file, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	var cfg Config
-	if err := yaml.Unmarshal(file, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
+	} else {
+		if err := yaml.Unmarshal(file, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse config: %w", err)
+		}
 	}
 
 	// Override with environment variables
@@ -169,5 +171,45 @@ func Load() (*Config, error) {
 		cfg.Database.PreferSimpleProtocol = true
 	}
 
+	if err := validateJWTSecret(&cfg); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
+}
+
+// validateJWTSecret refuses to start with an empty or well-known placeholder
+// JWT secret outside of development/test environments. CMS verifies tokens
+// using the same secret, so a mismatch or default value allows token forgery.
+func validateJWTSecret(cfg *Config) error {
+	secret := strings.TrimSpace(cfg.JWT.Secret)
+	env := strings.ToLower(strings.TrimSpace(cfg.Env))
+	isDev := env == "development" || env == "dev" || env == "test"
+
+	if secret == "" {
+		return fmt.Errorf("JWT secret is required: set JWT_SECRET env or jwt.secret in config.yaml")
+	}
+
+	knownPlaceholders := []string{
+		"your-secret-key-change-in-production",
+		"your-secret-key-change-this",
+		"change-me",
+		"changeme",
+		"dev_jwt_secret_change_me",
+	}
+	for _, placeholder := range knownPlaceholders {
+		if strings.EqualFold(secret, placeholder) {
+			if isDev {
+				fmt.Printf("[IAM] WARNING: using placeholder JWT secret %q — only acceptable in development\n", placeholder)
+				return nil
+			}
+			return fmt.Errorf("refusing to start: JWT secret is a well-known placeholder %q; set a strong JWT_SECRET", placeholder)
+		}
+	}
+
+	if !isDev && len(secret) < 32 {
+		return fmt.Errorf("refusing to start: JWT_SECRET must be at least 32 characters in %q environment (got %d)", cfg.Env, len(secret))
+	}
+
+	return nil
 }

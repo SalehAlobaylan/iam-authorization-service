@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -16,6 +17,12 @@ type User struct {
 	PasswordHash    string         `json:"-" gorm:"size:255;not null;column:password"`
 	EmailVerified   bool           `json:"email_verified" gorm:"default:false"`
 	EmailVerifiedAt *time.Time     `json:"email_verified_at"`
+
+	// Optional profile fields (added for Wahb user profiles).
+	Bio       *string        `json:"bio,omitempty" gorm:"type:text"`
+	AvatarURL *string        `json:"avatar_url,omitempty" gorm:"type:text"`
+	Interests pq.StringArray `json:"interests,omitempty" gorm:"type:text[]"`
+
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"deleted_at" gorm:"index"`
@@ -66,7 +73,12 @@ type LoginResponse struct {
 }
 
 // UpdateProfileRequest captures the fields a user may update on their own profile.
-// All fields are optional; only non-nil values are applied.
+// All fields are optional; only non-nil values are applied. Interests is a
+// pointer-to-slice so the handler can distinguish "unspecified" (leave alone)
+// from "empty array" (clear all).
 type UpdateProfileRequest struct {
-	Username *string `json:"username,omitempty"`
+	Username  *string   `json:"username,omitempty"`
+	Bio       *string   `json:"bio,omitempty"`
+	AvatarURL *string   `json:"avatar_url,omitempty"`
+	Interests *[]string `json:"interests,omitempty"`
 }

@@ -6,6 +6,8 @@
 *.dylib
 *.test
 *.out
+iam-service
+taskify-api
 
 # Output of the go coverage tool
 *.out

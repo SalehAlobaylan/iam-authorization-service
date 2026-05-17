@@ -50,8 +50,11 @@ func setupRoutes(router *gin.Engine, h *Handlers, _ *Services, cfg *config.Confi
 	iam.PUT("/users/:user_id/roles", middleware.RequirePermission("iam", "write"), h.IAM.UpdateUserRoles)
 	iam.PUT("/users/:user_id/permissions", middleware.RequirePermission("iam", "write"), h.IAM.UpdateUserPermissions)
 
+	admin := protected.Group("/admin")
+	admin.POST("/restart", middleware.RequireRole("admin"), h.Admin.Restart)
+	admin.POST("/migrations/up", middleware.RequireRole("admin"), h.Admin.MigrateUp)
+
 	if os.Getenv("ALLOW_SEED_ENDPOINT") == "true" {
-		admin := protected.Group("/admin")
 		admin.POST("/seed", middleware.RequireRole("admin"), h.Admin.Seed)
 	}
 }

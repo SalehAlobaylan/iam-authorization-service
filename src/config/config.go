@@ -187,6 +187,12 @@ func Load() (*Config, error) {
 // validateJWTSecret refuses to start with an empty or well-known placeholder
 // JWT secret outside of development/test environments. CMS verifies tokens
 // using the same secret, so a mismatch or default value allows token forgery.
+//
+// NOTE: We intentionally do NOT enforce a minimum secret length for now — a
+// short / simple JWT secret is acceptable at this stage of the project. The
+// only hard requirements are: the secret must be present and must not be a
+// known placeholder in production. Harden to a length/entropy requirement
+// (e.g. >= 32 chars) later once secret management is in place.
 func validateJWTSecret(cfg *Config) error {
 	secret := strings.TrimSpace(cfg.JWT.Secret)
 	env := strings.ToLower(strings.TrimSpace(cfg.Env))

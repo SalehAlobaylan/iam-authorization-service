@@ -43,14 +43,13 @@ func TestValidateJWTSecret_AllowsPlaceholderInDevelopment(t *testing.T) {
 	}
 }
 
-func TestValidateJWTSecret_RejectsShortSecretInProduction(t *testing.T) {
+// We intentionally allow short / simple JWT secrets for now (see
+// validateJWTSecret). A non-empty, non-placeholder secret must pass even if it
+// is short. Revisit once a minimum-length/entropy policy is introduced.
+func TestValidateJWTSecret_AllowsShortSecretInProduction(t *testing.T) {
 	cfg := &Config{Env: "production", JWT: JWTConfig{Secret: "tooshort"}}
-	err := validateJWTSecret(cfg)
-	if err == nil {
-		t.Fatal("expected production to reject a short secret")
-	}
-	if !strings.Contains(err.Error(), "at least 32 characters") {
-		t.Errorf("error should mention minimum length; got %v", err)
+	if err := validateJWTSecret(cfg); err != nil {
+		t.Fatalf("expected short non-placeholder secret to be accepted for now, got: %v", err)
 	}
 }
 

@@ -10,22 +10,22 @@ import (
 
 // User represents an application user persisted in the "users" table.
 type User struct {
-	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
-	Username     string         `json:"username" gorm:"size:255;not null;unique"`
-	Email        string         `json:"email" gorm:"size:255;not null;unique"`
-	TenantID     string         `json:"tenant_id" gorm:"size:64;not null;default:default;index"`
-	PasswordHash    string         `json:"-" gorm:"size:255;not null;column:password"`
-	EmailVerified   bool           `json:"email_verified" gorm:"default:false"`
-	EmailVerifiedAt *time.Time     `json:"email_verified_at"`
+	ID              uuid.UUID  `json:"id" gorm:"type:uuid;primaryKey"`
+	Username        string     `json:"username" gorm:"size:255;not null;unique"`
+	Email           string     `json:"email" gorm:"size:255;not null;unique"`
+	TenantID        string     `json:"tenant_id" gorm:"size:64;not null;default:default;index"`
+	PasswordHash    string     `json:"-" gorm:"size:255;not null;column:password"`
+	EmailVerified   bool       `json:"email_verified" gorm:"default:false"`
+	EmailVerifiedAt *time.Time `json:"email_verified_at"`
 
 	// Optional profile fields (added for Wahb user profiles).
 	Bio       *string        `json:"bio,omitempty" gorm:"type:text"`
 	AvatarURL *string        `json:"avatar_url,omitempty" gorm:"type:text"`
 	Interests pq.StringArray `json:"interests,omitempty" gorm:"type:text[]"`
 
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	DeletedAt    gorm.DeletedAt `json:"deleted_at" gorm:"index"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
 
 	// Associations
 	Tokens      []Token      `json:"-" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`

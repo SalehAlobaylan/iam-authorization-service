@@ -50,6 +50,8 @@ func setupRoutes(router *gin.Engine, h *Handlers, _ *Services, cfg *config.Confi
 	iam.PUT("/users/:user_id/roles", middleware.RequirePermission("iam", "write"), h.IAM.UpdateUserRoles)
 	iam.PUT("/users/:user_id/permissions", middleware.RequirePermission("iam", "write"), h.IAM.UpdateUserPermissions)
 
+	// Operational endpoints that restart the process or mutate the schema.
+	// These are needed by the deploy workflow and are gated by the "admin" role.
 	admin := protected.Group("/admin")
 	admin.POST("/restart", middleware.RequireRole("admin"), h.Admin.Restart)
 	admin.POST("/migrations/up", middleware.RequireRole("admin"), h.Admin.MigrateUp)

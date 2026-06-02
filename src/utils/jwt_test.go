@@ -6,13 +6,13 @@ import (
 )
 
 const (
-	testSecret  = "test-secret-must-be-long-enough-to-pass-validation"
-	testIssuer  = "iam-authorization-service"
-	testAud     = "platform-console"
-	testUserID  = "00000000-0000-0000-0000-000000000001"
-	testEmail   = "smoke@example.com"
-	testTenant  = "default"
-	testRole    = "admin"
+	testSecret = "test-secret-must-be-long-enough-to-pass-validation"
+	testIssuer = "iam-authorization-service"
+	testAud    = "platform-console"
+	testUserID = "00000000-0000-0000-0000-000000000001"
+	testEmail  = "smoke@example.com"
+	testTenant = "default"
+	testRole   = "admin"
 )
 
 func TestGenerateAndValidateAccessToken_RoundTrip(t *testing.T) {

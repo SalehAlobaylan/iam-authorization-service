@@ -9,14 +9,16 @@ import (
 )
 
 type UserService struct {
-	userRepo *repository.UserRepository
-	authz    *AuthzService
+	userRepo  *repository.UserRepository
+	tokenRepo *repository.TokenRepository
+	authz     *AuthzService
 }
 
-func NewUserService(userRepo *repository.UserRepository, authz *AuthzService) *UserService {
+func NewUserService(userRepo *repository.UserRepository, tokenRepo *repository.TokenRepository, authz *AuthzService) *UserService {
 	return &UserService{
-		userRepo: userRepo,
-		authz:    authz,
+		userRepo:  userRepo,
+		tokenRepo: tokenRepo,
+		authz:     authz,
 	}
 }
 
@@ -145,8 +147,8 @@ func (s *UserService) ChangePassword(claims *utils.AccessTokenClaims, currentPas
 	if strings.TrimSpace(currentPassword) == "" || strings.TrimSpace(newPassword) == "" {
 		return utils.ValidationError("current and new passwords are required")
 	}
-	if len(newPassword) < 4 {
-		return utils.ValidationError("new password must be at least 4 characters")
+	if err := utils.ValidatePassword(newPassword); err != nil {
+		return utils.ValidationError(err.Error())
 	}
 	if currentPassword == newPassword {
 		return utils.ValidationError("new password must differ from the current one")
@@ -164,9 +166,18 @@ func (s *UserService) ChangePassword(claims *utils.AccessTokenClaims, currentPas
 	if err != nil {
 		return utils.InternalServerError("failed to hash new password")
 	}
-	user.PasswordHash = hashed
-	if err := s.userRepo.Update(user); err != nil {
+	// Update only the password column rather than Save()-ing the whole row, so
+	// a concurrent profile edit isn't clobbered.
+	if err := s.userRepo.UpdatePassword(user.ID.String(), hashed); err != nil {
 		return utils.InternalServerError("failed to update password")
+	}
+
+	// Invalidate existing sessions: revoke all refresh tokens for this user so
+	// previously issued tokens cannot mint new access tokens after a password
+	// change. Already-issued access tokens remain valid until they expire
+	// (they are stateless JWTs).
+	if err := s.tokenRepo.RevokeAllUserTokens(user.ID.String()); err != nil {
+		return utils.InternalServerError("failed to revoke existing sessions")
 	}
 	return nil
 }

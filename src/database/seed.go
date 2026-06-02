@@ -79,22 +79,10 @@ func ensureDefaultAdminUser(db *gorm.DB) error {
 	var existing models.User
 	err := db.Where("email = ?", email).First(&existing).Error
 	if err == nil {
-		if cmpErr := utils.ComparePassword(existing.PasswordHash, password); cmpErr != nil {
-			hash, hashErr := utils.HashPassword(password)
-			if hashErr != nil {
-				return fmt.Errorf("hash default admin password: %w", hashErr)
-			}
-			if updateErr := db.Model(&models.User{}).
-				Where("id = ?", existing.ID).
-				Updates(map[string]interface{}{
-					"password":          hash,
-					"tenant_id":         tenantID,
-					"email_verified":    true,
-					"email_verified_at": time.Now(),
-				}).Error; updateErr != nil {
-				return fmt.Errorf("update default admin user password: %w", updateErr)
-			}
-		}
+		// Admin already exists — seeding is idempotent, so leave it untouched.
+		// We deliberately do NOT reset the password or tenant here: this routine
+		// runs on every startup, and clobbering them would silently revert a
+		// deliberate password change (or tenant placement) on the next boot.
 		return nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {

@@ -19,13 +19,13 @@ type Config struct {
 }
 
 type EmailConfig struct {
-	SMTPHost             string `yaml:"smtp_host"`
-	SMTPPort             string `yaml:"smtp_port"`
-	SMTPPassword         string `yaml:"smtp_password"`
-	FromAddress          string `yaml:"from_address"`
-	VerificationBaseURL  string `yaml:"verification_base_url"`
-	ResetBaseURL         string `yaml:"reset_base_url"`
-	RequireVerification  bool   `yaml:"require_verification"`
+	SMTPHost            string `yaml:"smtp_host"`
+	SMTPPort            string `yaml:"smtp_port"`
+	SMTPPassword        string `yaml:"smtp_password"`
+	FromAddress         string `yaml:"from_address"`
+	VerificationBaseURL string `yaml:"verification_base_url"`
+	ResetBaseURL        string `yaml:"reset_base_url"`
+	RequireVerification bool   `yaml:"require_verification"`
 }
 
 type ServerConfig struct {
@@ -71,6 +71,7 @@ type TenancyConfig struct {
  */
 func Load() (*Config, error) {
 	configPath := os.Getenv("CONFIG_PATH")
+	explicitPath := configPath != ""
 	if configPath == "" {
 		configPath = "src/config/config.yaml"
 	}
@@ -78,7 +79,11 @@ func Load() (*Config, error) {
 	var cfg Config
 	file, err := os.ReadFile(configPath)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		// A missing default config file is fine (env-only deployments). But if
+		// the operator explicitly set CONFIG_PATH, a missing/typo'd file is a
+		// misconfiguration and should fail fast rather than silently booting
+		// from env-only defaults.
+		if !os.IsNotExist(err) || explicitPath {
 			return nil, fmt.Errorf("failed to read config file: %w", err)
 		}
 	} else {
@@ -218,7 +223,6 @@ func validateJWTSecret(cfg *Config) error {
 			return fmt.Errorf("refusing to start: JWT secret is a well-known placeholder %q; set a strong JWT_SECRET", placeholder)
 		}
 	}
-
 
 	return nil
 }

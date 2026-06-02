@@ -76,6 +76,9 @@ func (h *AdminHandler) MigrateUp(c *gin.Context) {
 		})
 		return
 	}
+	// Close the source when done. We deliberately do NOT call m.Close(), which
+	// would also close the shared *sql.DB pool owned by GORM.
+	defer source.Close()
 
 	m, err := migratepkg.NewWithInstance("iofs", source, "postgres", driver)
 	if err != nil {
@@ -122,6 +125,15 @@ func (h *AdminHandler) MigrateUp(c *gin.Context) {
 	afterApplied := true
 	if errors.Is(avErr, migratepkg.ErrNilVersion) {
 		afterApplied = false
+	} else if avErr != nil {
+		// Migration itself succeeded, but we couldn't read back the resulting
+		// version. Surface this instead of reporting a misleading version 0.
+		log.Printf("[IAM] MigrateUp: failed to read post-migration version: %v", avErr)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Migrations applied but failed to read resulting version",
+			"details": avErr.Error(),
+		})
+		return
 	}
 
 	message := "Migrations applied"

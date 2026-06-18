@@ -1,4 +1,4 @@
--- Drop the tasks table (Taskify remnant, no longer used in Wahb)
+-- Drop the legacy tasks table; IAM no longer owns task management.
 DROP TABLE IF EXISTS tasks;
 
 -- Clean up stale task and CRM permissions

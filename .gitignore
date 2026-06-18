@@ -7,7 +7,7 @@
 *.test
 *.out
 iam-service
-taskify-api
+iam-api
 
 # Output of the go coverage tool
 *.out

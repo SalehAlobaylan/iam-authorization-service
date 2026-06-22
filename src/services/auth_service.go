@@ -127,6 +127,13 @@ func (s *AuthService) Login(email, password string) (*models.TokenPair, error) {
 		return nil, utils.UnauthorizedError("invalid credentials")
 	}
 
+	// Enforce email verification when the operator has enabled it. Without this
+	// gate the RequireVerification toggle is a no-op and unverified accounts
+	// (including emails the registrant doesn't control) can authenticate.
+	if s.config.Email.RequireVerification && !user.EmailVerified {
+		return nil, utils.UnauthorizedError("email not verified")
+	}
+
 	roles, err := s.roleRepo.GetUserRoles(user.ID.String())
 	if err != nil {
 		return nil, utils.InternalServerError("failed to load user roles")

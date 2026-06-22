@@ -10,7 +10,7 @@ It does **not** hold CMS business logic, content, or feeds — it is purely auth
 
 ## Platform-Console Integration
 
-Platform-Console (the admin dashboard, https://wahb-console.salehspace.dev) uses IAM for auth when `NEXT_PUBLIC_AUTH_MODE=iam`. Set `NEXT_PUBLIC_IAM_BASE_URL=http://localhost:4003` in Console's env. Console calls IAM for `login`, `register`, `refresh`, `logout`, and `GET /roles/me` (the operator's identity + roles + permissions).
+Platform-Console (the admin dashboard, https://wahb-console.salehspace.dev) uses IAM as its sole auth provider (the legacy CMS "bridge" auth mode was removed; the `NEXT_PUBLIC_AUTH_MODE` toggle no longer exists). Set `NEXT_PUBLIC_IAM_BASE_URL=http://localhost:4003` in Console's env. Console calls IAM for `login`, `register`, `refresh`, `logout`, and `GET /roles/me` (the operator's identity + roles + permissions).
 
 ## Tech Stack
 
@@ -72,9 +72,10 @@ If you use the Supabase transaction pooler (`*.pooler.supabase.com:6543`), set `
 
 ## Authentication & Authorization
 
-- **Public** (`/api/v1/auth/*`): register, login, refresh, verify-email, resend-verification, forgot-password, reset-password.
+- **Public** (`/api/v1/auth/*`): register, login, refresh, verify-email, resend-verification, forgot-password, reset-password. Registration always places the new user in the default tenant — it ignores any client-supplied `tenant_id` (the `RegisterRequest` DTO has no tenant field).
 - **Protected** (require a valid JWT): everything else. Authorization is enforced per route via `RequirePermission(resource, action)` (RBAC/ABAC) or `RequireRole("admin")`.
-- **Token flow:** login returns an access token + refresh token; refresh rotates the token (persisted in `tokens`).
+- **Token flow:** login returns an access token + refresh token; refresh rotates the token (persisted in `tokens`). When `REQUIRE_EMAIL_VERIFICATION=true`, login rejects unverified users.
+- **Session invalidation on credential change:** both the self-service password change *and* the forgot-password reset revoke **all** of the user's refresh tokens, so any pre-existing session is invalidated (already-issued stateless access tokens expire on their own ≤1h TTL).
 
 ### Seeded roles & permissions (`make seed`)
 

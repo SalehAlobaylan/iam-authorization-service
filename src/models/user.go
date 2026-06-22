@@ -52,11 +52,16 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 }
 
 // RegisterRequest captures the request payload for user registration.
+//
+// Note: tenant placement is intentionally NOT accepted from the client on this
+// public endpoint. New self-registered users are always placed in the server's
+// default tenant; honoring a client-supplied tenant_id would let an attacker
+// plant accounts inside any tenant. Admin-driven tenant placement must go
+// through an authenticated path.
 type RegisterRequest struct {
 	Username string `json:"username"`
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=4"`
-	TenantID string `json:"tenant_id,omitempty"`
 }
 
 // LoginRequest captures the request payload for user login.

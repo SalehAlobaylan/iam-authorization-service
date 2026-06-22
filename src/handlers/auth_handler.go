@@ -24,7 +24,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authService.Register(req.Username, req.Email, req.Password, req.TenantID)
+	// tenant_id is intentionally not taken from the request: public
+	// self-registration always lands in the server's default tenant.
+	user, err := h.authService.Register(req.Username, req.Email, req.Password, "")
 	if err != nil {
 		respondError(c, err)
 		return

@@ -98,7 +98,7 @@ func initServices(repos *Repositories, cfg *config.Config) *Services {
 		Authz:         authzSvc,
 		User:          services.NewUserService(repos.User, repos.Token, authzSvc),
 		Verification:  verifySvc,
-		PasswordReset: services.NewPasswordResetService(repos.PasswordReset, repos.User, emailSender, cfg),
+		PasswordReset: services.NewPasswordResetService(repos.PasswordReset, repos.User, repos.Token, emailSender, cfg),
 	}
 }
 

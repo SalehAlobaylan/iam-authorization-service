@@ -14,6 +14,7 @@ import (
 type PasswordResetService struct {
 	resetRepo *repository.PasswordResetRepository
 	userRepo  *repository.UserRepository
+	tokenRepo *repository.TokenRepository
 	email     EmailSender
 	cfg       *config.Config
 }
@@ -21,12 +22,14 @@ type PasswordResetService struct {
 func NewPasswordResetService(
 	resetRepo *repository.PasswordResetRepository,
 	userRepo *repository.UserRepository,
+	tokenRepo *repository.TokenRepository,
 	email EmailSender,
 	cfg *config.Config,
 ) *PasswordResetService {
 	return &PasswordResetService{
 		resetRepo: resetRepo,
 		userRepo:  userRepo,
+		tokenRepo: tokenRepo,
 		email:     email,
 		cfg:       cfg,
 	}
@@ -106,6 +109,14 @@ func (s *PasswordResetService) ResetPassword(token, newPassword string) error {
 	user.PasswordHash = hashedPassword
 	if err := s.userRepo.Update(user); err != nil {
 		return utils.InternalServerError("failed to update password")
+	}
+
+	// Invalidate all existing sessions: a password reset is the primary action
+	// a user takes when they suspect compromise, so any refresh tokens issued
+	// before the reset must be revoked. Mirrors UserService.ChangePassword.
+	// (Already-issued stateless access tokens remain valid until they expire.)
+	if err := s.tokenRepo.RevokeAllUserTokens(reset.UserID.String()); err != nil {
+		return utils.InternalServerError("failed to revoke existing sessions")
 	}
 
 	now := time.Now()

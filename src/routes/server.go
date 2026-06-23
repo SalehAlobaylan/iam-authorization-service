@@ -3,6 +3,8 @@ package routes
 import (
 	"fmt"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/iam-authorization-service/src/config"
@@ -19,7 +21,8 @@ type Server struct {
 }
 
 func NewServer(cfg *config.Config, db *gorm.DB) *Server {
-	if cfg.Env == "production" {
+	env := strings.ToLower(strings.TrimSpace(cfg.Env))
+	if env != "" && env != "development" && env != "dev" && env != "test" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
@@ -30,12 +33,37 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 	}
 
 	setupMiddleware(server.router)
+	configureTrustedProxies(server.router)
 	repos := initRepositories(db)
 	svcs := initServices(repos, cfg)
 	handlers := initHandlers(svcs, db)
 	setupRoutes(server.router, handlers, svcs, cfg)
 
 	return server
+}
+
+func configureTrustedProxies(router *gin.Engine) {
+	raw := strings.TrimSpace(os.Getenv("IAM_TRUSTED_PROXIES"))
+	if raw == "" {
+		raw = "127.0.0.1,::1"
+	}
+
+	parts := strings.Split(raw, ",")
+	proxies := make([]string, 0, len(parts))
+	for _, part := range parts {
+		proxy := strings.TrimSpace(part)
+		if proxy != "" {
+			proxies = append(proxies, proxy)
+		}
+	}
+
+	if len(proxies) == 0 {
+		proxies = []string{"127.0.0.1", "::1"}
+	}
+
+	if err := router.SetTrustedProxies(proxies); err != nil {
+		log.Printf("failed to configure IAM trusted proxies: %v", err)
+	}
 }
 
 func (s *Server) Run() error {

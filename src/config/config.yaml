@@ -18,6 +18,17 @@ jwt:
 tenancy:
   default_tenant_id: default
 
+# Object storage for avatar uploads (S3-compatible). Local dev points at MinIO
+# with the same wahb-media bucket the rest of the stack uses. Override per
+# environment via STORAGE_* env vars; an empty endpoint disables avatar upload.
+storage:
+  endpoint: "http://localhost:9000"
+  bucket: "wahb-media"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  public_url: "http://localhost:9000"
+  region: "us-east-1"
+
 email:
   smtp_host: ""
   smtp_port: "587"

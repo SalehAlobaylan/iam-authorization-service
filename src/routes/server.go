@@ -11,6 +11,7 @@ import (
 	"github.com/yourusername/iam-authorization-service/src/handlers"
 	"github.com/yourusername/iam-authorization-service/src/repository"
 	"github.com/yourusername/iam-authorization-service/src/services"
+	"github.com/yourusername/iam-authorization-service/src/storage"
 	"gorm.io/gorm"
 )
 
@@ -120,11 +121,26 @@ func initServices(repos *Repositories, cfg *config.Config) *Services {
 	// Wire verification into auth so registration triggers email verification
 	authSvc.SetVerificationService(verifySvc)
 
+	// Avatar object-storage is optional: a nil store disables avatar upload but
+	// lets IAM boot without MinIO/S3 configured.
+	avatarStore, storageErr := storage.NewAvatarStore(storage.Settings{
+		Endpoint:  cfg.Storage.Endpoint,
+		Region:    cfg.Storage.Region,
+		AccessKey: cfg.Storage.AccessKey,
+		SecretKey: cfg.Storage.SecretKey,
+		Bucket:    cfg.Storage.Bucket,
+		PublicURL: cfg.Storage.PublicURL,
+	})
+	if storageErr != nil {
+		log.Printf("avatar storage disabled: %v", storageErr)
+		avatarStore = nil
+	}
+
 	return &Services{
 		Auth:          authSvc,
 		IAM:           services.NewIAMService(repos.User, repos.Role, repos.Permission),
 		Authz:         authzSvc,
-		User:          services.NewUserService(repos.User, repos.Token, authzSvc),
+		User:          services.NewUserService(repos.User, repos.Token, authzSvc, avatarStore),
 		Verification:  verifySvc,
 		PasswordReset: services.NewPasswordResetService(repos.PasswordReset, repos.User, repos.Token, emailSender, cfg),
 	}

@@ -1,10 +1,16 @@
 package services
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/yourusername/iam-authorization-service/src/models"
 	"github.com/yourusername/iam-authorization-service/src/repository"
+	"github.com/yourusername/iam-authorization-service/src/storage"
 	"github.com/yourusername/iam-authorization-service/src/utils"
 )
 
@@ -12,13 +18,15 @@ type UserService struct {
 	userRepo  *repository.UserRepository
 	tokenRepo *repository.TokenRepository
 	authz     *AuthzService
+	avatar    *storage.AvatarStore
 }
 
-func NewUserService(userRepo *repository.UserRepository, tokenRepo *repository.TokenRepository, authz *AuthzService) *UserService {
+func NewUserService(userRepo *repository.UserRepository, tokenRepo *repository.TokenRepository, authz *AuthzService, avatar *storage.AvatarStore) *UserService {
 	return &UserService{
 		userRepo:  userRepo,
 		tokenRepo: tokenRepo,
 		authz:     authz,
+		avatar:    avatar,
 	}
 }
 
@@ -132,6 +140,42 @@ func (s *UserService) UpdateProfile(claims *utils.AccessTokenClaims, req models.
 		user.Interests = normalized
 	}
 
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, utils.InternalServerError("failed to update profile")
+	}
+	user.PasswordHash = ""
+	return user, nil
+}
+
+// UploadAvatar stores the image bytes in object storage and points the user's
+// avatar_url at the resulting public URL. The handler is responsible for
+// validating the file (type/size) and passing the sniffed content-type + ext.
+func (s *UserService) UploadAvatar(claims *utils.AccessTokenClaims, data []byte, contentType, ext string) (*models.User, error) {
+	if !s.authz.HasPermission(claims, "profile", "write") {
+		return nil, utils.ForbiddenError("insufficient permission to update profile")
+	}
+	if s.avatar == nil || !s.avatar.Enabled() {
+		return nil, utils.InternalServerError("avatar upload is not configured")
+	}
+
+	user, err := s.userRepo.GetByID(claims.UserID)
+	if err != nil {
+		return nil, utils.NotFoundError("user not found")
+	}
+
+	// Namespace by user id; a random suffix keeps re-uploads from colliding.
+	suffix := make([]byte, 8)
+	if _, err := rand.Read(suffix); err != nil {
+		return nil, utils.InternalServerError("failed to store avatar")
+	}
+	key := fmt.Sprintf("avatars/%s/%d-%s%s", user.ID.String(), time.Now().Unix(), hex.EncodeToString(suffix), ext)
+
+	url, err := s.avatar.Put(context.Background(), key, contentType, data)
+	if err != nil {
+		return nil, utils.InternalServerError("failed to store avatar")
+	}
+
+	user.AvatarURL = &url
 	if err := s.userRepo.Update(user); err != nil {
 		return nil, utils.InternalServerError("failed to update profile")
 	}

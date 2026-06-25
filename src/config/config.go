@@ -16,6 +16,19 @@ type Config struct {
 	JWT      JWTConfig      `yaml:"jwt"`
 	Tenancy  TenancyConfig  `yaml:"tenancy"`
 	Email    EmailConfig    `yaml:"email"`
+	Storage  StorageConfig  `yaml:"storage"`
+}
+
+// StorageConfig holds the S3-compatible object-storage contract used for avatar
+// uploads. It mirrors the platform-wide STORAGE_* env vars (MinIO locally,
+// S3/Supabase in prod). An empty Endpoint disables avatar upload.
+type StorageConfig struct {
+	Endpoint  string `yaml:"endpoint"`
+	Bucket    string `yaml:"bucket"`
+	AccessKey string `yaml:"access_key"`
+	SecretKey string `yaml:"secret_key"`
+	PublicURL string `yaml:"public_url"`
+	Region    string `yaml:"region"`
 }
 
 type EmailConfig struct {
@@ -164,6 +177,27 @@ func Load() (*Config, error) {
 		if value, parseErr := strconv.ParseBool(strings.TrimSpace(requireVerify)); parseErr == nil {
 			cfg.Email.RequireVerification = value
 		}
+	}
+
+	// Object-storage (avatar uploads) overrides — same STORAGE_* contract the
+	// rest of the stack uses.
+	if v := os.Getenv("STORAGE_ENDPOINT"); v != "" {
+		cfg.Storage.Endpoint = v
+	}
+	if v := os.Getenv("STORAGE_BUCKET"); v != "" {
+		cfg.Storage.Bucket = v
+	}
+	if v := os.Getenv("STORAGE_ACCESS_KEY"); v != "" {
+		cfg.Storage.AccessKey = v
+	}
+	if v := os.Getenv("STORAGE_SECRET_KEY"); v != "" {
+		cfg.Storage.SecretKey = v
+	}
+	if v := os.Getenv("STORAGE_PUBLIC_URL"); v != "" {
+		cfg.Storage.PublicURL = v
+	}
+	if v := os.Getenv("STORAGE_REGION"); v != "" {
+		cfg.Storage.Region = v
 	}
 
 	if cfg.JWT.Issuer == "" {

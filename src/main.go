@@ -24,7 +24,10 @@ func main() {
 	}
 
 	env := strings.ToLower(strings.TrimSpace(cfg.Env))
-	autoMigrate := env == "development" || env == "dev" || strings.EqualFold(os.Getenv("IAM_AUTO_MIGRATE"), "true")
+	autoMigrate := env == "development" || env == "dev"
+	if rawAutoMigrate, ok := os.LookupEnv("IAM_AUTO_MIGRATE"); ok {
+		autoMigrate = strings.EqualFold(strings.TrimSpace(rawAutoMigrate), "true")
+	}
 	if autoMigrate {
 		if err := database.AutoMigrate(db); err != nil {
 			log.Fatalf("database auto-migrate failed: %v", err)

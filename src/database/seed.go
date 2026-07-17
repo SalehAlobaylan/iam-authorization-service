@@ -183,6 +183,47 @@ func seedPermissions(db *gorm.DB) error {
 }
 
 // seedRolePermissions maps all permissions to roles based on access tiers.
+var defaultRolePermissionAllowList = map[string]map[string]bool{
+	"user": {
+		"profile:read":  true,
+		"profile:write": true,
+		"feed:read":     true,
+	},
+	"agent": {
+		"profile:read":  true,
+		"profile:write": true,
+		"source:read":   true,
+		"content:read":  true,
+		"feed:read":     true,
+	},
+	"editor": {
+		"profile:read":    true,
+		"profile:write":   true,
+		"source:read":     true,
+		"content:read":    true,
+		"content:write":   true,
+		"content:publish": true,
+		"feed:read":       true,
+	},
+	"manager": {
+		"profile:read":       true,
+		"profile:write":      true,
+		"user:read":          true,
+		"source:read":        true,
+		"source:write":       true,
+		"source:delete":      true,
+		"content:read":       true,
+		"content:write":      true,
+		"content:delete":     true,
+		"content:publish":    true,
+		"feed:read":          true,
+		"feed:manage":        true,
+		"aggregation:read":   true,
+		"aggregation:manage": true,
+	},
+}
+
+// seedRolePermissions maps all permissions to roles based on access tiers.
 func seedRolePermissions(db *gorm.DB) error {
 	var roles []models.Role
 	if err := db.Find(&roles).Error; err != nil {
@@ -193,50 +234,12 @@ func seedRolePermissions(db *gorm.DB) error {
 		return fmt.Errorf("load permissions: %w", err)
 	}
 
-	roleAllowList := map[string]map[string]bool{
-		"user": {
-			"profile:read":  true,
-			"profile:write": true,
-			"feed:read":     true,
-		},
-		"agent": {
-			"profile:read":  true,
-			"profile:write": true,
-			"source:read":   true,
-			"content:read":  true,
-			"feed:read":     true,
-		},
-		"editor": {
-			"profile:read":    true,
-			"profile:write":   true,
-			"source:read":     true,
-			"content:read":    true,
-			"content:write":   true,
-			"content:publish": true,
-			"feed:read":       true,
-		},
-		"manager": {
-			"profile:read":       true,
-			"profile:write":      true,
-			"user:read":          true,
-			"source:read":        true,
-			"source:write":       true,
-			"content:read":       true,
-			"content:write":      true,
-			"content:delete":     true,
-			"content:publish":    true,
-			"feed:read":          true,
-			"feed:manage":        true,
-			"aggregation:read":   true,
-			"aggregation:manage": true,
-		},
-	}
 	for _, role := range roles {
 		for _, p := range allPerms {
 			permissionKey := fmt.Sprintf("%s:%s", strings.ToLower(p.Resource), strings.ToLower(p.Action))
 			allowed := strings.EqualFold(role.Name, "admin")
 			if !allowed {
-				allowed = roleAllowList[role.Name][permissionKey]
+				allowed = defaultRolePermissionAllowList[role.Name][permissionKey]
 			}
 			if !allowed {
 				continue

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -219,8 +220,31 @@ func Load() (*Config, error) {
 	if err := validateJWTSecret(&cfg); err != nil {
 		return nil, err
 	}
+	if err := validateProductionEmailConfig(&cfg); err != nil {
+		return nil, err
+	}
 
 	return &cfg, nil
+}
+
+func validateProductionEmailConfig(cfg *Config) error {
+	env := strings.ToLower(strings.TrimSpace(cfg.Env))
+	if env != "production" && env != "prod" {
+		return nil
+	}
+	if !cfg.Email.RequireVerification {
+		return fmt.Errorf("REQUIRE_EMAIL_VERIFICATION must be true in production")
+	}
+	if strings.TrimSpace(cfg.Email.SMTPHost) == "" || strings.TrimSpace(cfg.Email.FromAddress) == "" {
+		return fmt.Errorf("SMTP_HOST and EMAIL_FROM are required in production for verification delivery")
+	}
+	for _, rawURL := range []string{cfg.Email.VerificationBaseURL, cfg.Email.ResetBaseURL} {
+		parsed, err := url.Parse(strings.TrimSpace(rawURL))
+		if err != nil || parsed.Scheme != "https" || parsed.Host != "wahb.salehspace.dev" {
+			return fmt.Errorf("production email links must use https://wahb.salehspace.dev")
+		}
+	}
+	return nil
 }
 
 // validateJWTSecret refuses to start with an empty or well-known placeholder

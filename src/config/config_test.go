@@ -64,3 +64,30 @@ func TestValidateJWTSecret_AcceptsStrongSecretInProduction(t *testing.T) {
 		t.Fatalf("expected strong production secret to pass, got: %v", err)
 	}
 }
+
+func TestValidateProductionEmailConfig_RequiresVerifiedHTTPSDelivery(t *testing.T) {
+	cfg := &Config{
+		Env: "production",
+		Email: EmailConfig{
+			RequireVerification: true,
+			SMTPHost:            "smtp.example.test",
+			FromAddress:         "noreply@wahb.salehspace.dev",
+			VerificationBaseURL: "https://wahb.salehspace.dev",
+			ResetBaseURL:        "https://wahb.salehspace.dev",
+		},
+	}
+	if err := validateProductionEmailConfig(cfg); err != nil {
+		t.Fatalf("expected complete production email config to pass, got: %v", err)
+	}
+
+	cfg.Email.RequireVerification = false
+	if err := validateProductionEmailConfig(cfg); err == nil {
+		t.Fatal("expected production to require verified email")
+	}
+
+	cfg.Email.RequireVerification = true
+	cfg.Email.ResetBaseURL = "http://localhost:3000"
+	if err := validateProductionEmailConfig(cfg); err == nil {
+		t.Fatal("expected production to reject non-Wahb reset links")
+	}
+}

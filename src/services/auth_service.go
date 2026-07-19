@@ -14,12 +14,12 @@ import (
 )
 
 type AuthService struct {
-	userRepo     *repository.UserRepository
-	tokenRepo    *repository.TokenRepository
-	roleRepo     *repository.RoleRepository
-	permRepo     *repository.PermissionRepository
-	config       *config.Config
-	verifySvc    *VerificationService
+	userRepo  *repository.UserRepository
+	tokenRepo *repository.TokenRepository
+	roleRepo  *repository.RoleRepository
+	permRepo  *repository.PermissionRepository
+	config    *config.Config
+	verifySvc *VerificationService
 }
 
 func NewAuthService(
@@ -107,11 +107,17 @@ func (s *AuthService) Register(username, email, password, tenantID string) (*mod
 		return nil, utils.InternalServerError("failed to assign default role")
 	}
 
-	// Send verification email (non-blocking — registration succeeds even if email fails)
+	// Registration is still durable when delivery fails, but the response must
+	// expose pending delivery to the client so it can offer resend/help instead
+	// of asserting an email was sent.
+	user.VerificationDelivery = "sent"
 	if s.verifySvc != nil {
 		if err := s.verifySvc.SendVerification(user.ID.String(), user.Email); err != nil {
-			log.Printf("WARNING: failed to send verification email to %s: %v", user.Email, err)
+			user.VerificationDelivery = "pending"
+			log.Printf("[email_delivery] type=verification result=pending user_id=%s error_type=%T", user.ID, err)
 		}
+	} else {
+		user.VerificationDelivery = "pending"
 	}
 
 	user.PasswordHash = ""

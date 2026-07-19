@@ -31,6 +31,12 @@ type User struct {
 	Tokens      []Token      `json:"-" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 	Roles       []Role       `json:"-" gorm:"many2many:user_roles;"`
 	Permissions []Permission `json:"-" gorm:"many2many:user_permissions;"`
+
+	// VerificationDelivery is response-only registration state. It is not
+	// persisted because the durable email provider/outbox is a separate concern.
+	// "pending" tells the native Check Email surface to show delivery help rather
+	// than claiming that an SMTP attempt succeeded.
+	VerificationDelivery string `json:"-" gorm:"-"`
 }
 
 // TableName overrides the default table name used by GORM.

@@ -132,6 +132,9 @@ func (s *AuthService) Login(email, password string) (*models.TokenPair, error) {
 	if err := utils.ComparePassword(user.PasswordHash, password); err != nil {
 		return nil, utils.UnauthorizedError("invalid credentials")
 	}
+	if user.SuspendedAt != nil {
+		return nil, utils.UnauthorizedError("account suspended")
+	}
 
 	// Enforce email verification when the operator has enabled it. Without this
 	// gate the RequireVerification toggle is a no-op and unverified accounts
@@ -205,6 +208,10 @@ func (s *AuthService) Refresh(refreshToken string) (*models.TokenPair, error) {
 	user, err := s.userRepo.GetByID(token.UserID.String())
 	if err != nil {
 		return nil, utils.UnauthorizedError("user not found")
+	}
+	if user.SuspendedAt != nil {
+		_ = s.tokenRepo.Revoke(refreshToken)
+		return nil, utils.UnauthorizedError("account suspended")
 	}
 
 	roles, err := s.roleRepo.GetUserRoles(user.ID.String())

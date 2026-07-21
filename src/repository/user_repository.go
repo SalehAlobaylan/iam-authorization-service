@@ -3,6 +3,7 @@ package repository
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/yourusername/iam-authorization-service/src/models"
 
@@ -72,6 +73,14 @@ func (r *UserRepository) UpdatePassword(userID, passwordHash string) error {
 	return r.db.Model(&models.User{}).
 		Where("id = ?", userID).
 		Update("password", passwordHash).Error
+}
+
+// SetSuspendedAt changes only the account-lifecycle field, avoiding a broad
+// Save that could overwrite profile edits made concurrently.
+func (r *UserRepository) SetSuspendedAt(userID string, suspendedAt *time.Time) error {
+	return r.db.Model(&models.User{}).
+		Where("id = ?", userID).
+		Update("suspended_at", suspendedAt).Error
 }
 
 // Delete removes a user by ID.

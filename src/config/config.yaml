@@ -29,6 +29,12 @@ storage:
   public_url: "http://localhost:9000"
   region: "us-east-1"
 
+# CMS receives IAM-owned account-suspension mirrors so existing CMS-valid JWTs
+# are rejected immediately. Deployments override these infrastructure values.
+cms:
+  base_url: "http://localhost:8080"
+  service_token: ""
+
 email:
   smtp_host: ""
   smtp_port: "587"
@@ -37,7 +43,6 @@ email:
   verification_base_url: "http://localhost:3005"
   reset_base_url: "http://localhost:3005"
   require_verification: false
-
 
 
 

@@ -1,9 +1,11 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/yourusername/iam-authorization-service/src/models"
 	"github.com/yourusername/iam-authorization-service/src/repository"
@@ -11,20 +13,26 @@ import (
 )
 
 type IAMService struct {
-	userRepo *repository.UserRepository
-	roleRepo *repository.RoleRepository
-	permRepo *repository.PermissionRepository
+	userRepo         *repository.UserRepository
+	tokenRepo        *repository.TokenRepository
+	roleRepo         *repository.RoleRepository
+	permRepo         *repository.PermissionRepository
+	suspensionMirror *CMSSuspensionClient
 }
 
 func NewIAMService(
 	userRepo *repository.UserRepository,
+	tokenRepo *repository.TokenRepository,
 	roleRepo *repository.RoleRepository,
 	permRepo *repository.PermissionRepository,
+	suspensionMirror *CMSSuspensionClient,
 ) *IAMService {
 	return &IAMService{
-		userRepo: userRepo,
-		roleRepo: roleRepo,
-		permRepo: permRepo,
+		userRepo:         userRepo,
+		tokenRepo:        tokenRepo,
+		roleRepo:         roleRepo,
+		permRepo:         permRepo,
+		suspensionMirror: suspensionMirror,
 	}
 }
 
@@ -38,6 +46,48 @@ type IAMUserView struct {
 	Permissions []string `json:"permissions"`
 	CreatedAt   string   `json:"created_at"`
 	UpdatedAt   string   `json:"updated_at"`
+	SuspendedAt *string  `json:"suspended_at,omitempty"`
+}
+
+// SetUserSuspension is IAM's account-lifecycle operation. It revokes refresh
+// tokens and requires the CMS mirror acknowledgement before reporting success,
+// so CMS rejects pre-existing access JWTs immediately.
+func (s *IAMService) SetUserSuspension(userID, tenantID string, suspended bool) error {
+	if err := utils.ValidateUUID(userID); err != nil {
+		return utils.ValidationError("invalid user id")
+	}
+	if s.suspensionMirror == nil {
+		return utils.NewAPIError(503, "account suspension enforcement is not configured")
+	}
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return utils.NotFoundError("user not found")
+	}
+	if user.TenantID != tenantID {
+		return utils.ForbiddenError("cross-tenant account suspension is forbidden")
+	}
+
+	previous := user.SuspendedAt
+	if suspended {
+		now := time.Now().UTC()
+		if err := s.userRepo.SetSuspendedAt(userID, &now); err != nil {
+			return utils.InternalServerError("failed to suspend account")
+		}
+		if err := s.tokenRepo.RevokeAllUserTokens(userID); err != nil {
+			_ = s.userRepo.SetSuspendedAt(userID, previous)
+			return utils.InternalServerError("failed to revoke account sessions")
+		}
+	} else if err := s.userRepo.SetSuspendedAt(userID, nil); err != nil {
+		return utils.InternalServerError("failed to restore account")
+	}
+
+	if err := s.suspensionMirror.Sync(context.Background(), userID, tenantID, suspended); err != nil {
+		// Preserve the prior lifecycle state if CMS did not acknowledge the
+		// enforcement mirror. Revoked refresh tokens intentionally stay revoked.
+		_ = s.userRepo.SetSuspendedAt(userID, previous)
+		return utils.NewAPIError(502, "account suspension could not be enforced")
+	}
+	return nil
 }
 
 func (s *IAMService) ListRoles() ([]models.Role, error) {
@@ -193,7 +243,7 @@ func (s *IAMService) userView(user models.User) (IAMUserView, error) {
 	}
 	sort.Strings(permissionList)
 
-	return IAMUserView{
+	view := IAMUserView{
 		ID:          user.ID.String(),
 		Username:    user.Username,
 		Email:       user.Email,
@@ -203,7 +253,12 @@ func (s *IAMService) userView(user models.User) (IAMUserView, error) {
 		Permissions: permissionList,
 		CreatedAt:   user.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:   user.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-	}, nil
+	}
+	if user.SuspendedAt != nil {
+		value := user.SuspendedAt.UTC().Format("2006-01-02T15:04:05Z07:00")
+		view.SuspendedAt = &value
+	}
+	return view, nil
 }
 
 func parsePermission(permission string) (string, string, error) {

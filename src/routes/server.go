@@ -38,7 +38,7 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 	repos := initRepositories(db)
 	svcs := initServices(repos, cfg)
 	handlers := initHandlers(svcs, db)
-	setupRoutes(server.router, handlers, svcs, cfg)
+	setupRoutes(server.router, handlers, repos, svcs, cfg)
 
 	return server
 }
@@ -138,7 +138,7 @@ func initServices(repos *Repositories, cfg *config.Config) *Services {
 
 	return &Services{
 		Auth:          authSvc,
-		IAM:           services.NewIAMService(repos.User, repos.Role, repos.Permission),
+		IAM:           services.NewIAMService(repos.User, repos.Token, repos.Role, repos.Permission, services.NewCMSSuspensionClient(cfg.CMS)),
 		Authz:         authzSvc,
 		User:          services.NewUserService(repos.User, repos.Token, authzSvc, avatarStore),
 		Verification:  verifySvc,

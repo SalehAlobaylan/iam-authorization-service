@@ -17,6 +17,7 @@ type User struct {
 	PasswordHash    string     `json:"-" gorm:"size:255;not null;column:password"`
 	EmailVerified   bool       `json:"email_verified" gorm:"default:false"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at"`
+	SuspendedAt     *time.Time `json:"suspended_at,omitempty"`
 
 	// Optional profile fields (added for Wahb user profiles).
 	Bio       *string        `json:"bio,omitempty" gorm:"type:text"`

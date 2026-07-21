@@ -8,7 +8,7 @@ import (
 	"github.com/yourusername/iam-authorization-service/src/middleware"
 )
 
-func setupRoutes(router *gin.Engine, h *Handlers, _ *Services, cfg *config.Config) {
+func setupRoutes(router *gin.Engine, h *Handlers, repos *Repositories, _ *Services, cfg *config.Config) {
 	// Public endpoints - no authentication required
 	router.GET("/", h.Health.Welcome)
 	router.GET("/health", h.Health.Health)
@@ -26,6 +26,7 @@ func setupRoutes(router *gin.Engine, h *Handlers, _ *Services, cfg *config.Confi
 
 	protected := v1.Group("")
 	protected.Use(middleware.AuthenticateWithClaims(cfg.JWT.Secret, cfg.JWT.Issuer, cfg.JWT.Audience))
+	protected.Use(middleware.RejectSuspendedUser(repos.User))
 	protected.POST("/auth/logout", h.Auth.Logout)
 
 	users := protected.Group("/users")
@@ -50,6 +51,7 @@ func setupRoutes(router *gin.Engine, h *Handlers, _ *Services, cfg *config.Confi
 	iam.GET("/users/:user_id/roles", h.IAM.GetUserRoles)
 	iam.PUT("/users/:user_id/roles", middleware.RequirePermission("iam", "write"), h.IAM.UpdateUserRoles)
 	iam.PUT("/users/:user_id/permissions", middleware.RequirePermission("iam", "write"), h.IAM.UpdateUserPermissions)
+	iam.PUT("/users/:user_id/suspension", middleware.RequirePermission("iam", "write"), h.IAM.UpdateUserSuspension)
 
 	// Operational endpoints that restart the process or mutate the schema.
 	// These are needed by the deploy workflow and are gated by the "admin" role.

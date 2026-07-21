@@ -18,6 +18,7 @@ type Config struct {
 	Tenancy  TenancyConfig  `yaml:"tenancy"`
 	Email    EmailConfig    `yaml:"email"`
 	Storage  StorageConfig  `yaml:"storage"`
+	CMS      CMSConfig      `yaml:"cms"`
 }
 
 // StorageConfig holds the S3-compatible object-storage contract used for avatar
@@ -30,6 +31,13 @@ type StorageConfig struct {
 	SecretKey string `yaml:"secret_key"`
 	PublicURL string `yaml:"public_url"`
 	Region    string `yaml:"region"`
+}
+
+// CMSConfig contains only IAM's service-to-service enforcement connection.
+// It is infrastructure configuration, not a moderation policy surface.
+type CMSConfig struct {
+	BaseURL      string `yaml:"base_url"`
+	ServiceToken string `yaml:"service_token"`
 }
 
 type EmailConfig struct {
@@ -199,6 +207,12 @@ func Load() (*Config, error) {
 	}
 	if v := os.Getenv("STORAGE_REGION"); v != "" {
 		cfg.Storage.Region = v
+	}
+	if v := os.Getenv("CMS_BASE_URL"); v != "" {
+		cfg.CMS.BaseURL = v
+	}
+	if v := os.Getenv("CMS_IAM_SERVICE_TOKEN"); v != "" {
+		cfg.CMS.ServiceToken = v
 	}
 
 	if cfg.JWT.Issuer == "" {

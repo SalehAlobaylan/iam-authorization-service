@@ -28,6 +28,10 @@ type updateUserPermissionsRequest struct {
 	Permissions []string `json:"permissions"`
 }
 
+type updateUserSuspensionRequest struct {
+	Suspended bool `json:"suspended"`
+}
+
 func (h *IAMHandler) ListRoles(c *gin.Context) {
 	roles, err := h.iamService.ListRoles()
 	if err != nil {
@@ -149,4 +153,34 @@ func (h *IAMHandler) UpdateUserPermissions(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "permissions updated"})
+}
+
+func (h *IAMHandler) UpdateUserSuspension(c *gin.Context) {
+	claims, err := claimsFromContext(c)
+	if err != nil {
+		respondError(c, utils.UnauthorizedError("missing auth context"))
+		return
+	}
+	if claims.TenantID == "" {
+		respondError(c, utils.ForbiddenError("tenant_id claim is required"))
+		return
+	}
+	if !h.authz.HasPermission(claims, "iam", "write") && !h.authz.IsAdmin(claims) {
+		respondError(c, utils.ForbiddenError("insufficient permission to suspend accounts"))
+		return
+	}
+	if c.Param("user_id") == claims.UserID {
+		respondError(c, utils.ValidationError("operators cannot suspend their own account"))
+		return
+	}
+	var req updateUserSuspensionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, utils.ValidationError("invalid request payload"))
+		return
+	}
+	if err := h.iamService.SetUserSuspension(c.Param("user_id"), claims.TenantID, req.Suspended); err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "account suspension updated", "suspended": req.Suspended})
 }

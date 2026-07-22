@@ -88,6 +88,10 @@ func (r *UserRepository) Delete(id string) error {
 	return r.db.Delete(&models.User{}, "id = ?", id).Error
 }
 
+func (r *UserRepository) DeletePermanently(id string) error {
+	return r.db.Unscoped().Delete(&models.User{}, "id = ?", id).Error
+}
+
 // GetAll retrieves all users. Intended primarily for admin-style views.
 func (r *UserRepository) GetAll() ([]models.User, error) {
 	var users []models.User

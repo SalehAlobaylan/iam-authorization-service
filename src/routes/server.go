@@ -83,6 +83,7 @@ type Repositories struct {
 	Permission    *repository.PermissionRepository
 	Verification  *repository.VerificationRepository
 	PasswordReset *repository.PasswordResetRepository
+	Deletion      *repository.AccountDeletionRepository
 }
 
 func initRepositories(db *gorm.DB) *Repositories {
@@ -93,6 +94,7 @@ func initRepositories(db *gorm.DB) *Repositories {
 		Permission:    repository.NewPermissionRepository(db),
 		Verification:  repository.NewVerificationRepository(db),
 		PasswordReset: repository.NewPasswordResetRepository(db),
+		Deletion:      repository.NewAccountDeletionRepository(db),
 	}
 }
 
@@ -103,6 +105,7 @@ type Services struct {
 	User          *services.UserService
 	Verification  *services.VerificationService
 	PasswordReset *services.PasswordResetService
+	Deletion      *services.AccountDeletionService
 }
 
 func initServices(repos *Repositories, cfg *config.Config) *Services {
@@ -136,6 +139,8 @@ func initServices(repos *Repositories, cfg *config.Config) *Services {
 		avatarStore = nil
 	}
 
+	deletionSvc := services.NewAccountDeletionService(repos.User, repos.Token, repos.Deletion, services.NewCMSSuspensionClient(cfg.CMS), emailSender)
+	deletionSvc.Start()
 	return &Services{
 		Auth:          authSvc,
 		IAM:           services.NewIAMService(repos.User, repos.Token, repos.Role, repos.Permission, services.NewCMSSuspensionClient(cfg.CMS)),
@@ -143,6 +148,7 @@ func initServices(repos *Repositories, cfg *config.Config) *Services {
 		User:          services.NewUserService(repos.User, repos.Token, authzSvc, avatarStore),
 		Verification:  verifySvc,
 		PasswordReset: services.NewPasswordResetService(repos.PasswordReset, repos.User, repos.Token, emailSender, cfg),
+		Deletion:      deletionSvc,
 	}
 }
 
@@ -161,7 +167,7 @@ func initHandlers(svcs *Services, db *gorm.DB) *Handlers {
 	return &Handlers{
 		Auth:          handlers.NewAuthHandler(svcs.Auth),
 		IAM:           handlers.NewIAMHandler(svcs.IAM, svcs.Authz),
-		User:          handlers.NewUserHandler(svcs.User),
+		User:          handlers.NewUserHandler(svcs.User, svcs.Deletion),
 		Role:          handlers.NewRoleHandler(svcs.Authz),
 		Admin:         handlers.NewAdminHandler(db),
 		Health:        handlers.NewHealthHandler(db),

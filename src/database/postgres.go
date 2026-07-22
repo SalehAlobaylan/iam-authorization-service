@@ -60,6 +60,7 @@ func NewPostgres(cfg config.DatabaseConfig) (*gorm.DB, error) {
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&models.User{},
+		&models.AccountDeletionRequest{},
 		&models.Token{},
 		&models.Role{},
 		&models.Permission{},

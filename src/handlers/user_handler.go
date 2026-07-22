@@ -14,11 +14,34 @@ import (
 const maxAvatarBytes = 5 << 20 // 5 MiB
 
 type UserHandler struct {
-	userService *services.UserService
+	userService     *services.UserService
+	deletionService *services.AccountDeletionService
 }
 
-func NewUserHandler(userService *services.UserService) *UserHandler {
-	return &UserHandler{userService: userService}
+func NewUserHandler(userService *services.UserService, deletionService *services.AccountDeletionService) *UserHandler {
+	return &UserHandler{userService: userService, deletionService: deletionService}
+}
+
+type accountDeletionRequest struct {
+	Password string `json:"password"`
+}
+
+func (h *UserHandler) RequestAccountDeletion(c *gin.Context) {
+	claims, err := claimsFromContext(c)
+	if err != nil {
+		respondError(c, utils.UnauthorizedError("missing auth context"))
+		return
+	}
+	var req accountDeletionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, utils.ValidationError("invalid request body"))
+		return
+	}
+	if err := h.deletionService.Request(claims.UserID, req.Password); err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"message": "account deletion requested"})
 }
 
 func (h *UserHandler) GetUserProfile(c *gin.Context) {

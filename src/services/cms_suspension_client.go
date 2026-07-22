@@ -56,3 +56,22 @@ func (c *CMSSuspensionClient) Sync(ctx context.Context, userID, tenantID string,
 	}
 	return nil
 }
+
+func (c *CMSSuspensionClient) DeleteProductData(ctx context.Context, userID, tenantID string) error {
+	payload, _ := json.Marshal(map[string]string{"tenant_id": tenantID})
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.baseURL+"/internal/auth/users/"+userID+"/product-data", bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("create product deletion request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Content-Type", "application/json")
+	response, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("send product deletion request: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("CMS product deletion returned %s", response.Status)
+	}
+	return nil
+}

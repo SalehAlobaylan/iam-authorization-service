@@ -36,6 +36,7 @@ func setupRoutes(router *gin.Engine, h *Handlers, repos *Repositories, _ *Servic
 	users.PUT("/profile", middleware.RequirePermission("profile", "write"), h.User.UpdateProfile)
 	users.POST("/avatar", middleware.RequirePermission("profile", "write"), h.User.UploadAvatar)
 	users.PUT("/profile/password", middleware.RequirePermission("profile", "write"), h.User.ChangePassword)
+	users.POST("/profile/deletion", middleware.RequirePermission("profile", "write"), h.User.RequestAccountDeletion)
 	users.GET("/profile/:user_id", middleware.RequirePermission("profile", "read"), h.User.GetUserProfileByUserID)
 
 	roles := protected.Group("/roles")

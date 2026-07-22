@@ -44,6 +44,31 @@ func (r *TokenRepository) Revoke(refreshToken string) error {
 	return r.db.Where("refresh_token = ?", refreshToken).Delete(&models.Token{}).Error
 }
 
+// ConsumeAndCreate rotates one refresh credential atomically. The conditional
+// delete is the concurrency gate: exactly one caller can consume a given
+// parent, and only that caller may insert the descendant token.
+func (r *TokenRepository) ConsumeAndCreate(
+	refreshToken string,
+	replacement *models.Token,
+) (bool, error) {
+	consumed := false
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("refresh_token = ?", refreshToken).Delete(&models.Token{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return nil
+		}
+		if err := tx.Create(replacement).Error; err != nil {
+			return err
+		}
+		consumed = true
+		return nil
+	})
+	return consumed, err
+}
+
 // DeleteByRefreshToken is kept as an alias for compatibility.
 func (r *TokenRepository) DeleteByRefreshToken(refreshToken string) error {
 	return r.Revoke(refreshToken)

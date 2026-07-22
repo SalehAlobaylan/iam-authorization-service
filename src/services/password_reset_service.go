@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -75,7 +76,10 @@ func (s *PasswordResetService) ForgotPassword(email string) error {
 <p>If you did not request a password reset, you can ignore this email.</p>`, resetURL)
 
 	if err := s.email.Send(user.Email, subject, body); err != nil {
-		return utils.InternalServerError("failed to send reset email")
+		// Match the nonexistent-account response. Provider health must not turn
+		// this endpoint into an account-enumeration oracle.
+		log.Printf("[email_delivery] type=password_reset result=pending error_type=%T", err)
+		return nil
 	}
 	return nil
 }
@@ -86,47 +90,18 @@ func (s *PasswordResetService) ResetPassword(token, newPassword string) error {
 		return utils.ValidationError(err.Error())
 	}
 
-	reset, err := s.resetRepo.GetByToken(token)
-	if err != nil {
-		return utils.NotFoundError("invalid or expired reset token")
-	}
-	if reset.IsExpired() {
-		return utils.ValidationError("reset token has expired")
-	}
-	if reset.IsUsed() {
-		return utils.ValidationError("reset token has already been used")
-	}
-
 	hashedPassword, err := utils.HashPassword(newPassword)
 	if err != nil {
 		return utils.InternalServerError("failed to hash password")
 	}
 
-	user, err := s.userRepo.GetByID(reset.UserID.String())
+	consumed, err := s.resetRepo.ConsumeAndResetPassword(token, hashedPassword, time.Now())
 	if err != nil {
-		return utils.NotFoundError("user not found")
+		return utils.InternalServerError("failed to reset password")
 	}
-	user.PasswordHash = hashedPassword
-	if err := s.userRepo.Update(user); err != nil {
-		return utils.InternalServerError("failed to update password")
+	if !consumed {
+		return utils.ValidationError("invalid or expired reset token")
 	}
-
-	// Invalidate all existing sessions: a password reset is the primary action
-	// a user takes when they suspect compromise, so any refresh tokens issued
-	// before the reset must be revoked. Mirrors UserService.ChangePassword.
-	// (Already-issued stateless access tokens remain valid until they expire.)
-	if err := s.tokenRepo.RevokeAllUserTokens(reset.UserID.String()); err != nil {
-		return utils.InternalServerError("failed to revoke existing sessions")
-	}
-
-	now := time.Now()
-	reset.UsedAt = &now
-	if err := s.resetRepo.Update(reset); err != nil {
-		return utils.InternalServerError("failed to update reset record")
-	}
-
-	// Clean up all reset tokens for this user
-	_ = s.resetRepo.DeleteByUserID(reset.UserID.String())
 
 	return nil
 }

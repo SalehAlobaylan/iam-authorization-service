@@ -43,7 +43,8 @@ func (s *SMTPEmailSender) Send(to, subject, body string) error {
 	return smtp.SendMail(addr, auth, s.from, []string{to}, []byte(msg))
 }
 
-// LogEmailSender logs emails to stdout instead of sending them (for development).
+// LogEmailSender deliberately does not print recipients, bodies, or links. Those
+// values contain personal data and bearer credentials even in development logs.
 type LogEmailSender struct{}
 
 func NewLogEmailSender() *LogEmailSender {
@@ -51,6 +52,6 @@ func NewLogEmailSender() *LogEmailSender {
 }
 
 func (s *LogEmailSender) Send(to, subject, body string) error {
-	log.Printf("[EMAIL] To: %s | Subject: %s | Body: %s", to, subject, body)
+	log.Printf("[email_delivery] provider=development result=suppressed")
 	return nil
 }

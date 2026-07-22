@@ -8,12 +8,16 @@ import (
 )
 
 type PasswordReset struct {
-	ID        uuid.UUID  `json:"id" gorm:"type:uuid;primaryKey"`
-	UserID    uuid.UUID  `json:"user_id" gorm:"type:uuid;not null;index"`
-	Token     string     `json:"-" gorm:"size:255;not null;uniqueIndex"`
-	ExpiresAt time.Time  `json:"expires_at" gorm:"not null"`
-	UsedAt    *time.Time `json:"used_at"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID     uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	UserID uuid.UUID `json:"user_id" gorm:"type:uuid;not null;index"`
+	// Token is delivery-only. New credentials are persisted only through
+	// TokenDigest; the legacy token column remains readable during the rollout
+	// so links issued before the migration can still be consumed.
+	Token       string     `json:"-" gorm:"-"`
+	TokenDigest string     `json:"-" gorm:"size:64;uniqueIndex;column:token_digest"`
+	ExpiresAt   time.Time  `json:"expires_at" gorm:"not null"`
+	UsedAt      *time.Time `json:"used_at"`
+	CreatedAt   time.Time  `json:"created_at"`
 
 	User User `json:"-" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 }

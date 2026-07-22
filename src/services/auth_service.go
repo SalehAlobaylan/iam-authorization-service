@@ -251,15 +251,16 @@ func (s *AuthService) Refresh(refreshToken string) (*models.TokenPair, error) {
 		return nil, utils.InternalServerError("failed to generate refresh token")
 	}
 
-	if err := s.tokenRepo.Revoke(refreshToken); err != nil {
-		return nil, utils.InternalServerError("failed to revoke old refresh token")
-	}
-	if err := s.tokenRepo.Create(&models.Token{
+	consumed, err := s.tokenRepo.ConsumeAndCreate(refreshToken, &models.Token{
 		UserID:       user.ID,
 		RefreshToken: newRefreshToken,
 		ExpiresAt:    time.Now().Add(time.Duration(s.config.JWT.RefreshTokenTTL) * time.Second),
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, utils.InternalServerError("failed to store new refresh token")
+	}
+	if !consumed {
+		return nil, utils.UnauthorizedError("invalid refresh token")
 	}
 
 	return &models.TokenPair{

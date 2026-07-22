@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -74,35 +75,14 @@ func (s *VerificationService) SendVerification(userID, email string) error {
 
 // VerifyEmail validates the token and marks the user's email as verified.
 func (s *VerificationService) VerifyEmail(token string) error {
-	v, err := s.verifyRepo.GetByToken(token)
-	if err != nil {
-		return utils.NotFoundError("invalid or expired verification token")
-	}
-	if v.IsExpired() {
-		return utils.ValidationError("verification token has expired")
-	}
-	if v.VerifiedAt != nil {
-		return utils.ValidationError("email already verified")
-	}
-
 	now := time.Now()
-	v.VerifiedAt = &now
-	if err := s.verifyRepo.Update(v); err != nil {
-		return utils.InternalServerError("failed to update verification record")
-	}
-
-	user, err := s.userRepo.GetByID(v.UserID.String())
+	consumed, err := s.verifyRepo.ConsumeAndVerifyUser(token, now)
 	if err != nil {
-		return utils.NotFoundError("user not found")
+		return utils.InternalServerError("failed to verify email")
 	}
-	user.EmailVerified = true
-	user.EmailVerifiedAt = &now
-	if err := s.userRepo.Update(user); err != nil {
-		return utils.InternalServerError("failed to update user")
+	if !consumed {
+		return utils.ValidationError("invalid or expired verification token")
 	}
-
-	// Clean up all verification tokens for this user
-	_ = s.verifyRepo.DeleteByUserID(v.UserID.String())
 
 	return nil
 }
@@ -121,5 +101,10 @@ func (s *VerificationService) ResendVerification(email string) error {
 	// Clean up old tokens
 	_ = s.verifyRepo.DeleteByUserID(user.ID.String())
 
-	return s.SendVerification(user.ID.String(), user.Email)
+	// Public recovery delivery must remain neutral when the provider is down;
+	// otherwise a sender can enumerate registered, unverified accounts.
+	if err := s.SendVerification(user.ID.String(), user.Email); err != nil {
+		log.Printf("[email_delivery] type=verification result=pending error_type=%T", err)
+	}
+	return nil
 }

@@ -3,12 +3,12 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/yourusername/iam-authorization-service/src/models"
 	"github.com/yourusername/iam-authorization-service/src/repository"
 	"github.com/yourusername/iam-authorization-service/src/utils"
-	"gorm.io/gorm"
 )
 
 type AccountDeletionService struct {
@@ -34,27 +34,18 @@ func (s *AccountDeletionService) Request(userID, password string) error {
 	if err := utils.ComparePassword(user.PasswordHash, password); err != nil {
 		return utils.UnauthorizedError("password confirmation failed")
 	}
-	if existing, err := s.requests.GetByUserID(userID); err == nil {
-		if existing.Status == "completed" {
-			return utils.NotFoundError("user not found")
-		}
-		return nil
-	} else if err != nil && err != gorm.ErrRecordNotFound {
-		return utils.InternalServerError("failed to create deletion request")
-	}
 	now := time.Now().UTC()
-	if err := s.users.SetSuspendedAt(userID, &now); err != nil {
-		return utils.InternalServerError("failed to lock account")
-	}
-	if err := s.tokens.RevokeAllUserTokens(userID); err != nil {
-		return utils.InternalServerError("failed to revoke account sessions")
-	}
-	if err := s.cms.Sync(context.Background(), userID, user.TenantID, true); err != nil {
-		_ = s.users.SetSuspendedAt(userID, nil)
-		return utils.NewAPIError(502, "account deletion could not be enforced")
-	}
-	if err := s.requests.Create(&models.AccountDeletionRequest{UserID: user.ID, TenantID: user.TenantID, ConfirmationEmail: user.Email, Status: "queued"}); err != nil {
+	_, created, err := s.requests.CreateAndLock(user, now)
+	if err != nil {
 		return utils.InternalServerError("failed to queue account deletion")
+	}
+	if created {
+		// The durable request and local suspension are already committed. A CMS
+		// failure must not re-enable the account; the worker retries the mirror
+		// before deleting product data.
+		if err := s.cms.Sync(context.Background(), userID, user.TenantID, true); err != nil {
+			log.Printf("[account_deletion] suspension mirror pending user_id=%s error_type=%T", userID, err)
+		}
 	}
 	return nil
 }
@@ -70,40 +61,60 @@ func (s *AccountDeletionService) Start() {
 	}()
 }
 func (s *AccountDeletionService) ProcessQueued() {
-	rows, err := s.requests.Queued()
-	if err != nil {
-		return
-	}
-	for i := range rows {
-		s.process(&rows[i])
+	for range 20 {
+		request, err := s.requests.ClaimNext(time.Now().UTC().Add(-5 * time.Minute))
+		if err != nil || request == nil {
+			return
+		}
+		s.process(request)
 	}
 }
 func (s *AccountDeletionService) process(request *models.AccountDeletionRequest) {
-	request.Status = "processing"
-	request.AttemptCount++
-	_ = s.requests.Save(request)
-	if err := s.cms.DeleteProductData(context.Background(), request.UserID.String(), request.TenantID); err != nil {
+	if err := s.cms.Sync(context.Background(), request.UserID.String(), request.TenantID, true); err != nil {
 		s.fail(request, err)
 		return
 	}
-	if err := s.users.DeletePermanently(request.UserID.String()); err != nil {
-		s.fail(request, err)
-		return
+	if request.ProductDataDeletedAt == nil {
+		if err := s.cms.DeleteProductData(context.Background(), request.UserID.String(), request.TenantID); err != nil {
+			s.fail(request, err)
+			return
+		}
+		now := time.Now().UTC()
+		if err := s.requests.MarkProductDataDeleted(request.ID.String(), now); err != nil {
+			s.fail(request, err)
+			return
+		}
+		request.ProductDataDeletedAt = &now
 	}
-	if err := s.email.Send(request.ConfirmationEmail, "Your Wahb account has been deleted", "<p>Your Wahb account and product data have been deleted.</p>"); err != nil {
-		s.fail(request, err)
-		return
+	if request.IAMUserDeletedAt == nil {
+		if err := s.users.DeletePermanently(request.UserID.String()); err != nil {
+			s.fail(request, err)
+			return
+		}
+		now := time.Now().UTC()
+		if err := s.requests.MarkIAMUserDeleted(request.ID.String(), now); err != nil {
+			s.fail(request, err)
+			return
+		}
+		request.IAMUserDeletedAt = &now
 	}
 	now := time.Now().UTC()
-	request.Status = "completed"
-	request.CompletedAt = &now
-	request.LastError = nil
-	request.ConfirmationEmail = ""
-	_ = s.requests.Save(request)
+	email := request.ConfirmationEmail
+	if err := s.requests.Complete(request.ID.String(), now); err != nil {
+		s.fail(request, err)
+		return
+	}
+	// Confirmation delivery is non-retryable: the deletion has completed and a
+	// failed mail must never cause irreversible product deletion to be replayed.
+	if email != "" {
+		if err := s.email.Send(email, "Your Wahb account has been deleted", "<p>Your Wahb account and product data have been deleted.</p>"); err != nil {
+			log.Printf("[account_deletion] confirmation delivery failed request_id=%s error_type=%T", request.ID, err)
+		}
+	}
 }
 func (s *AccountDeletionService) fail(request *models.AccountDeletionRequest, err error) {
 	message := fmt.Sprintf("%T", err)
-	request.Status = "failed"
-	request.LastError = &message
-	_ = s.requests.Save(request)
+	if saveErr := s.requests.Fail(request.ID.String(), message); saveErr != nil {
+		log.Printf("[account_deletion] failed to persist retry state request_id=%s error_type=%T", request.ID, saveErr)
+	}
 }

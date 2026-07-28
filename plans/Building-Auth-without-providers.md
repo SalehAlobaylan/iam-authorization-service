@@ -410,4 +410,3 @@ Add OAuth if needed:
 **OAuth should be optional** - something you might add for user convenience ("Sign in with Google"), but NOT required for your service to function.
 
 This makes your project more impressive and more useful! Should we plan out the authentication features for the generalization phase?
-

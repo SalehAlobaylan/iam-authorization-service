@@ -4709,7 +4709,7 @@ iam-authorization-service/
 - Architecture diagrams
 - Code examples for GitHub
 
-What would be most helpful for you right now?
+What would be most helpful pods right now?
 
 ---
 
@@ -4717,9 +4717,9 @@ What would be most helpful for you right now?
 
 why don't we use Gin since i built with it previously?
 
-You're absolutely right! Let's use **Gin** since you already have experience with it. That's a much better choice for you.
+You're absolutely right! Let's use **Gin** since you already have experience with it. That's a much better choice pods.
 
-## Why Gin Makes More Sense For You
+## Why Gin Makes More Sense Pods
 
 ### 1. **You Already Know It**
 
@@ -5453,4 +5453,3 @@ This structure adapts Udacity's Go API starter approach while building your IAM 
 [^14_13]: https://github.com/udacity/dsnd-data-science-process-lesson
 
 [^14_14]: https://github.com/udacity/nd1309-Project-6b-Example-Template
-

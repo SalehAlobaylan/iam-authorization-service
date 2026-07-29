@@ -21,6 +21,30 @@ type AccessTokenClaims struct {
 	jwt.RegisteredClaims
 }
 
+// ReauthProofClaims is deliberately separate from an access token. It is
+// purpose/plan/manifest-bound and expires in five minutes, so a refresh token
+// can never manufacture proof of a fresh password check.
+type ReauthProofClaims struct {
+	UserID       string `json:"user_id"`
+	Email        string `json:"email"`
+	TenantID     string `json:"tenant_id"`
+	Purpose      string `json:"purpose"`
+	PlanID       string `json:"plan_id"`
+	ManifestHash string `json:"manifest_hash"`
+	AuthTime     int64  `json:"auth_time"`
+	jwt.RegisteredClaims
+}
+
+func GenerateReauthProof(userID, email, tenantID, purpose, planID, manifestHash, secret, issuer string) (string, error) {
+	now := time.Now().UTC()
+	jti, err := uuid.NewV4()
+	if err != nil {
+		return "", err
+	}
+	claims := ReauthProofClaims{UserID: userID, Email: email, TenantID: tenantID, Purpose: purpose, PlanID: planID, ManifestHash: manifestHash, AuthTime: now.Unix(), RegisteredClaims: jwt.RegisteredClaims{Issuer: issuer, Subject: userID, ID: jti.String(), Audience: []string{"wahb-feed-recovery-reauth"}, IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute))}}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+}
+
 // GenerateAccessToken generates a signed JWT access token for the given user.
 //
 //   - user:       the authenticated user model

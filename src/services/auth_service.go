@@ -195,6 +195,24 @@ func (s *AuthService) Login(email, password string) (*models.TokenPair, error) {
 	}, nil
 }
 
+func (s *AuthService) Reauthenticate(userID, password, purpose, planID, manifestHash string) (string, error) {
+	if strings.TrimSpace(purpose) != "feed_recovery" || strings.TrimSpace(planID) == "" || len(strings.TrimSpace(manifestHash)) != 64 {
+		return "", utils.ValidationError("invalid re-auth binding")
+	}
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil || user.SuspendedAt != nil {
+		return "", utils.UnauthorizedError("invalid credentials")
+	}
+	if err := utils.ComparePassword(user.PasswordHash, password); err != nil {
+		return "", utils.UnauthorizedError("invalid credentials")
+	}
+	proof, err := utils.GenerateReauthProof(user.ID.String(), user.Email, user.TenantID, purpose, planID, manifestHash, s.config.JWT.Secret, s.config.JWT.Issuer)
+	if err != nil {
+		return "", utils.InternalServerError("failed to issue re-auth proof")
+	}
+	return proof, nil
+}
+
 func (s *AuthService) Refresh(refreshToken string) (*models.TokenPair, error) {
 	token, err := s.tokenRepo.GetByRefreshToken(refreshToken)
 	if err != nil {

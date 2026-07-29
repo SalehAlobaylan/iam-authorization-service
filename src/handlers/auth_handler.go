@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yourusername/iam-authorization-service/src/middleware"
 	"github.com/yourusername/iam-authorization-service/src/models"
 	"github.com/yourusername/iam-authorization-service/src/services"
 	"github.com/yourusername/iam-authorization-service/src/utils"
@@ -83,4 +84,28 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "logout successful"})
+}
+
+func (h *AuthHandler) Reauthenticate(c *gin.Context) {
+	claims, ok := middleware.GetClaims(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authenticated identity"})
+		return
+	}
+	var req struct {
+		Password     string `json:"password" binding:"required"`
+		Purpose      string `json:"purpose" binding:"required"`
+		PlanID       string `json:"plan_id" binding:"required"`
+		ManifestHash string `json:"manifest_hash" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, utils.ValidationError("invalid request payload"))
+		return
+	}
+	proof, err := h.authService.Reauthenticate(claims.UserID, req.Password, req.Purpose, req.PlanID, req.ManifestHash)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"proof": proof, "expires_in": 300})
 }

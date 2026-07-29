@@ -28,6 +28,7 @@ func setupRoutes(router *gin.Engine, h *Handlers, repos *Repositories, _ *Servic
 	protected.Use(middleware.AuthenticateWithClaims(cfg.JWT.Secret, cfg.JWT.Issuer, cfg.JWT.Audience))
 	protected.Use(middleware.RejectSuspendedUser(repos.User))
 	protected.POST("/auth/logout", h.Auth.Logout)
+	protected.POST("/auth/reauth", middleware.RequireRole("admin"), h.Auth.Reauthenticate)
 
 	users := protected.Group("/users")
 	users.GET("", middleware.RequirePermission("user", "read"), h.User.GetUsers)

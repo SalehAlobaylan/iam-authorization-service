@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"gorm.io/gorm"
 )
 
 // AccountDeletionRequest is IAM's durable, one-way deletion workflow record.
@@ -26,7 +27,7 @@ type AccountDeletionRequest struct {
 
 func (AccountDeletionRequest) TableName() string { return "account_deletion_requests" }
 
-func (r *AccountDeletionRequest) BeforeCreate() error {
+func (r *AccountDeletionRequest) BeforeCreate(_ *gorm.DB) error {
 	if r.ID == uuid.Nil {
 		id, err := uuid.NewV4()
 		if err != nil {

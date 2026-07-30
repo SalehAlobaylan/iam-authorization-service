@@ -91,3 +91,35 @@ func TestValidateProductionEmailConfig_RequiresVerifiedHTTPSDelivery(t *testing.
 		t.Fatal("expected production to reject non-Wahb reset links")
 	}
 }
+
+func TestDatabaseURLNeedsSimpleProtocolForManagedPoolers(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{
+			name: "supabase transaction pooler",
+			url:  "postgresql://user:password@aws-1.pooler.supabase.com:6543/postgres",
+			want: true,
+		},
+		{
+			name: "neon pooler",
+			url:  "postgresql://user:password@ep-example-pooler.c-2.aws.neon.tech/db",
+			want: true,
+		},
+		{
+			name: "direct postgres",
+			url:  "postgresql://user:password@db.example.test:5432/postgres",
+			want: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := databaseURLNeedsSimpleProtocol(test.url); got != test.want {
+				t.Fatalf("databaseURLNeedsSimpleProtocol() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}

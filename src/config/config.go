@@ -227,7 +227,7 @@ func Load() (*Config, error) {
 	if cfg.Tenancy.DefaultTenantID == "" {
 		cfg.Tenancy.DefaultTenantID = "default"
 	}
-	if strings.Contains(cfg.Database.URL, "pooler.supabase.com:6543") {
+	if databaseURLNeedsSimpleProtocol(cfg.Database.URL) {
 		cfg.Database.PreferSimpleProtocol = true
 	}
 
@@ -239,6 +239,17 @@ func Load() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func databaseURLNeedsSimpleProtocol(databaseURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(databaseURL))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return strings.Contains(host, "pooler.supabase.com") ||
+		strings.Contains(host, "-pooler.") ||
+		strings.Contains(host, ".pooler.")
 }
 
 func validateProductionEmailConfig(cfg *Config) error {

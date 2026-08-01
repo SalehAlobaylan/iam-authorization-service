@@ -19,6 +19,7 @@ type Config struct {
 	Email    EmailConfig    `yaml:"email"`
 	Storage  StorageConfig  `yaml:"storage"`
 	CMS      CMSConfig      `yaml:"cms"`
+	Operator OperatorConfig `yaml:"operator"`
 }
 
 // StorageConfig holds the S3-compatible object-storage contract used for avatar
@@ -38,6 +39,13 @@ type StorageConfig struct {
 type CMSConfig struct {
 	BaseURL      string `yaml:"base_url"`
 	ServiceToken string `yaml:"service_token"`
+}
+
+// OperatorConfig carries the one reverse-direction machine credential used by
+// CMS to re-check a creator's live IAM authority. It never authenticates a
+// browser and grants no IAM mutation capability.
+type OperatorConfig struct {
+	AccessSnapshotToken string `yaml:"access_snapshot_token"`
 }
 
 type EmailConfig struct {
@@ -213,6 +221,15 @@ func Load() (*Config, error) {
 	}
 	if v := os.Getenv("CMS_IAM_SERVICE_TOKEN"); v != "" {
 		cfg.CMS.ServiceToken = v
+	}
+	if v := os.Getenv("OPERATOR_IAM_ACCESS_SNAPSHOT_TOKEN"); v != "" {
+		cfg.Operator.AccessSnapshotToken = v
+	}
+	if cfg.Operator.AccessSnapshotToken == "" {
+		// The internal access snapshot is called by CMS itself. Reuse the
+		// established CMS service identity unless an older deployment explicitly
+		// configures a narrower override.
+		cfg.Operator.AccessSnapshotToken = os.Getenv("CMS_SERVICE_TOKEN")
 	}
 
 	if cfg.JWT.Issuer == "" {

@@ -61,6 +61,7 @@ If you use the Supabase transaction pooler (`*.pooler.supabase.com:6543`), set `
 | `DEFAULT_TENANT_ID` | no | default | Tenant claim fallback |
 | `DB_PREFER_SIMPLE_PROTOCOL` | no | false | `true` for Supabase pooler |
 | `CONFIG_PATH` | no | src/config/config.yaml | YAML config (env overrides win) |
+| `OPERATOR_IAM_ACCESS_SNAPSHOT_TOKEN` | Operator-enabled environments | — | Dedicated CMS-only credential for read-only `GET /internal/access/users/:user_id` snapshots |
 | `SEED_ON_STARTUP` | no | false | Seed defaults on boot even without auto-migrate |
 | `ALLOW_SEED_ENDPOINT` | no | false | Enable the admin `POST /admin/seed` route |
 | `IAM_AUTO_MIGRATE` | no | (dev only) | Force auto-migrate outside dev *(in code, not in `.env.example`)* |

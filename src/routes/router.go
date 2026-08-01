@@ -30,6 +30,12 @@ func setupRoutes(router *gin.Engine, h *Handlers, repos *Repositories, _ *Servic
 	protected.POST("/auth/logout", h.Auth.Logout)
 	protected.POST("/auth/reauth", middleware.RequireRole("admin"), h.Auth.Reauthenticate)
 
+	// CMS alone calls this capability to refresh durable Operator authority.
+	// It deliberately sits outside human JWT routes and exposes no mutation.
+	operatorInternal := router.Group("/internal/access")
+	operatorInternal.Use(middleware.RequireServiceToken(cfg.Operator.AccessSnapshotToken))
+	operatorInternal.GET("/users/:user_id", h.OperatorAccess.GetSnapshot)
+
 	users := protected.Group("/users")
 	users.GET("", middleware.RequirePermission("user", "read"), h.User.GetUsers)
 	users.DELETE("/:user_id", middleware.RequirePermission("user", "delete"), h.User.DeleteUser)

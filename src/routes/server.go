@@ -153,25 +153,27 @@ func initServices(repos *Repositories, cfg *config.Config) *Services {
 }
 
 type Handlers struct {
-	Auth          *handlers.AuthHandler
-	IAM           *handlers.IAMHandler
-	User          *handlers.UserHandler
-	Role          *handlers.RoleHandler
-	Admin         *handlers.AdminHandler
-	Health        *handlers.HealthHandler
-	Verification  *handlers.VerificationHandler
-	PasswordReset *handlers.PasswordResetHandler
+	Auth           *handlers.AuthHandler
+	IAM            *handlers.IAMHandler
+	User           *handlers.UserHandler
+	Role           *handlers.RoleHandler
+	Admin          *handlers.AdminHandler
+	Health         *handlers.HealthHandler
+	Verification   *handlers.VerificationHandler
+	PasswordReset  *handlers.PasswordResetHandler
+	OperatorAccess *handlers.OperatorAccessHandler
 }
 
 func initHandlers(svcs *Services, db *gorm.DB) *Handlers {
 	return &Handlers{
-		Auth:          handlers.NewAuthHandler(svcs.Auth),
-		IAM:           handlers.NewIAMHandler(svcs.IAM, svcs.Authz),
-		User:          handlers.NewUserHandler(svcs.User, svcs.Deletion),
-		Role:          handlers.NewRoleHandler(svcs.Authz),
-		Admin:         handlers.NewAdminHandler(db),
-		Health:        handlers.NewHealthHandler(db),
-		Verification:  handlers.NewVerificationHandler(svcs.Verification),
-		PasswordReset: handlers.NewPasswordResetHandler(svcs.PasswordReset),
+		Auth:           handlers.NewAuthHandler(svcs.Auth),
+		IAM:            handlers.NewIAMHandler(svcs.IAM, svcs.Authz),
+		User:           handlers.NewUserHandler(svcs.User, svcs.Deletion),
+		Role:           handlers.NewRoleHandler(svcs.Authz),
+		Admin:          handlers.NewAdminHandler(db),
+		Health:         handlers.NewHealthHandler(db),
+		Verification:   handlers.NewVerificationHandler(svcs.Verification),
+		PasswordReset:  handlers.NewPasswordResetHandler(svcs.PasswordReset),
+		OperatorAccess: handlers.NewOperatorAccessHandler(svcs.IAM),
 	}
 }

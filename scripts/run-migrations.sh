@@ -1,11 +1,5 @@
 #!/usr/bin/env sh
 set -eu
 
-if ! command -v migrate >/dev/null 2>&1; then
-  echo "error: migrate CLI not found. Install from https://github.com/golang-migrate/migrate"
-  exit 1
-fi
-
-DB_URL="${DB_URL:-postgres://iam:password123@localhost:5433/iam?sslmode=disable}"
-
-migrate -path database-migrations/migrations -database "$DB_URL" up
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+exec "$SCRIPT_DIR/../../scripts/iam-migrate.sh" apply

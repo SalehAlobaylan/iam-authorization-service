@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync/atomic"
 	"time"
 
 	"github.com/yourusername/iam-authorization-service/src/models"
@@ -17,13 +18,24 @@ type AccountDeletionService struct {
 	requests *repository.AccountDeletionRepository
 	cms      *CMSSuspensionClient
 	email    EmailSender
+	ready    atomic.Bool
 }
 
 func NewAccountDeletionService(users *repository.UserRepository, tokens *repository.TokenRepository, requests *repository.AccountDeletionRepository, cms *CMSSuspensionClient, email EmailSender) *AccountDeletionService {
-	return &AccountDeletionService{users, tokens, requests, cms, email}
+	return &AccountDeletionService{users: users, tokens: tokens, requests: requests, cms: cms, email: email}
+}
+
+// Ready reports whether the durable account-deletion schema was verified and
+// the worker was admitted. Health handlers use this to avoid reporting a
+// healthy IAM process while an irreversible lifecycle worker is disabled.
+func (s *AccountDeletionService) Ready() bool {
+	return s != nil && s.ready.Load()
 }
 
 func (s *AccountDeletionService) Request(userID, password string) error {
+	if !s.ready.Load() {
+		return utils.NewAPIError(503, "account deletion is unavailable until IAM migrations are applied")
+	}
 	if s.cms == nil {
 		return utils.NewAPIError(503, "account deletion is not configured")
 	}
@@ -51,6 +63,11 @@ func (s *AccountDeletionService) Request(userID, password string) error {
 }
 
 func (s *AccountDeletionService) Start() {
+	if s.requests == nil || !s.requests.SchemaReady() {
+		log.Printf("[account_deletion] worker disabled: apply canonical IAM migrations 000015 and 000017")
+		return
+	}
+	s.ready.Store(true)
 	go func() {
 		ticker := time.NewTicker(20 * time.Second)
 		defer ticker.Stop()

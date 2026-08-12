@@ -171,7 +171,7 @@ func initHandlers(svcs *Services, db *gorm.DB) *Handlers {
 		User:           handlers.NewUserHandler(svcs.User, svcs.Deletion),
 		Role:           handlers.NewRoleHandler(svcs.Authz),
 		Admin:          handlers.NewAdminHandler(db),
-		Health:         handlers.NewHealthHandler(db),
+		Health:         handlers.NewHealthHandler(db, svcs.Deletion.Ready),
 		Verification:   handlers.NewVerificationHandler(svcs.Verification),
 		PasswordReset:  handlers.NewPasswordResetHandler(svcs.PasswordReset),
 		OperatorAccess: handlers.NewOperatorAccessHandler(svcs.IAM),

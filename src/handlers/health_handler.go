@@ -8,11 +8,12 @@ import (
 )
 
 type HealthHandler struct {
-	db *gorm.DB
+	db                   *gorm.DB
+	accountDeletionReady func() bool
 }
 
-func NewHealthHandler(db *gorm.DB) *HealthHandler {
-	return &HealthHandler{db: db}
+func NewHealthHandler(db *gorm.DB, accountDeletionReady func() bool) *HealthHandler {
+	return &HealthHandler{db: db, accountDeletionReady: accountDeletionReady}
 }
 
 // Health returns the health status of the service
@@ -37,9 +38,26 @@ func (h *HealthHandler) Health(c *gin.Context) {
 		return
 	}
 
+	deletionReady := h.accountDeletionReady != nil && h.accountDeletionReady()
+	if !deletionReady {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "unhealthy",
+			"message": "required IAM migrations are not applied",
+			"components": gin.H{
+				"database":         "ready",
+				"account_deletion": "schema_unavailable",
+			},
+		})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
 		"message": "IAM Authorization Service is running",
+		"components": gin.H{
+			"database":         "ready",
+			"account_deletion": "ready",
+		},
 	})
 }
 
@@ -51,12 +69,12 @@ func (h *HealthHandler) Welcome(c *gin.Context) {
 		"service": "iam-authorization-service",
 		"version": "1.0.0",
 		"docs": gin.H{
-			"health":      "/health",
-			"api_base":    "/api/v1",
-			"auth":  "/api/v1/auth",
-			"users": "/api/v1/users",
-			"roles": "/api/v1/roles",
-			"iam":   "/api/v1/iam",
+			"health":   "/health",
+			"api_base": "/api/v1",
+			"auth":     "/api/v1/auth",
+			"users":    "/api/v1/users",
+			"roles":    "/api/v1/roles",
+			"iam":      "/api/v1/iam",
 		},
 	})
 }

@@ -3,11 +3,6 @@ include .env
 export
 endif
 
-DATABASE_URL ?= $(or $(DB_URL),postgres://iam:password123@localhost:5433/iam?sslmode=disable)
-# Transaction poolers cannot safely hold the advisory lock used by golang-migrate.
-# Supabase exposes session mode on the same host at 5432.
-MIGRATION_DATABASE_URL ?= $(subst :6543/,:5432/,$(DATABASE_URL))
-
 .PHONY: run build test tidy migrate-up migrate-down seed docker-up docker-down docker-logs
 
 run:
@@ -23,10 +18,10 @@ tidy:
 	go mod tidy
 
 migrate-up:
-	@migrate -path database-migrations/migrations -database "$(MIGRATION_DATABASE_URL)" up
+	@../scripts/iam-migrate.sh apply
 
 migrate-down:
-	@migrate -path database-migrations/migrations -database "$(MIGRATION_DATABASE_URL)" down 1
+	@../scripts/iam-migrate.sh down-one
 
 seed:
 	psql "$(DATABASE_URL)" -f scripts/seed.sql

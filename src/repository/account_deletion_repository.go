@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"errors"
 	"time"
 
 	"github.com/yourusername/iam-authorization-service/src/models"
@@ -13,6 +12,22 @@ type AccountDeletionRepository struct{ db *gorm.DB }
 
 func NewAccountDeletionRepository(db *gorm.DB) *AccountDeletionRepository {
 	return &AccountDeletionRepository{db: db}
+}
+
+// SchemaReady is a read-only startup guard. IAM schema changes remain owned by
+// the canonical migration ledger; the background worker must not hammer a
+// missing table every polling interval when migrations 000015/000017 have not
+// yet been applied.
+func (r *AccountDeletionRepository) SchemaReady() bool {
+	if r == nil || r.db == nil || !r.db.Migrator().HasTable(&models.AccountDeletionRequest{}) {
+		return false
+	}
+	for _, column := range []string{"processing_started_at", "product_data_deleted_at", "iam_user_deleted_at"} {
+		if !r.db.Migrator().HasColumn(&models.AccountDeletionRequest{}, column) {
+			return false
+		}
+	}
+	return true
 }
 func (r *AccountDeletionRepository) Create(request *models.AccountDeletionRequest) error {
 	return r.db.Create(request).Error
@@ -71,19 +86,20 @@ func (r *AccountDeletionRepository) GetByUserID(userID string) (*models.AccountD
 func (r *AccountDeletionRepository) ClaimNext(staleBefore time.Time) (*models.AccountDeletionRequest, error) {
 	var request models.AccountDeletionRequest
 	err := r.db.Transaction(func(tx *gorm.DB) error {
-		err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+		result := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
 			Where("status IN ? OR (status = ? AND processing_started_at < ?)", []string{"queued", "failed"}, "processing", staleBefore).
 			Order("created_at ASC").
-			First(&request).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil
+			Limit(1).
+			Find(&request)
+		if result.Error != nil {
+			return result.Error
 		}
-		if err != nil {
-			return err
+		if result.RowsAffected == 0 {
+			return nil
 		}
 
 		now := time.Now().UTC()
-		result := tx.Model(&models.AccountDeletionRequest{}).Where("id = ?", request.ID).Updates(map[string]interface{}{
+		result = tx.Model(&models.AccountDeletionRequest{}).Where("id = ?", request.ID).Updates(map[string]interface{}{
 			"status":                "processing",
 			"processing_started_at": now,
 			"attempt_count":         gorm.Expr("attempt_count + 1"),

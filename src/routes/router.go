@@ -8,7 +8,7 @@ import (
 	"github.com/yourusername/iam-authorization-service/src/middleware"
 )
 
-func setupRoutes(router *gin.Engine, h *Handlers, repos *Repositories, _ *Services, cfg *config.Config) {
+func setupRoutes(router *gin.Engine, h *Handlers, repos *Repositories, svcs *Services, cfg *config.Config) {
 	// Public endpoints - no authentication required
 	router.GET("/", h.Health.Welcome)
 	router.GET("/health", h.Health.Health)
@@ -35,6 +35,12 @@ func setupRoutes(router *gin.Engine, h *Handlers, repos *Repositories, _ *Servic
 	operatorInternal := router.Group("/internal/access")
 	operatorInternal.Use(middleware.RequireServiceToken(cfg.Operator.AccessSnapshotToken))
 	operatorInternal.GET("/users/:user_id", h.OperatorAccess.GetSnapshot)
+
+	migrationInternal := router.Group("/internal/database-migration")
+	migrationInternal.Use(middleware.RequireServiceToken(os.Getenv("IAM_MIGRATION_COORDINATOR_SERVICE_TOKEN")))
+	migrationInternal.GET("/quiescence", h.DatabaseMigration.GetQuiescence)
+	migrationInternal.POST("/quiesce", h.DatabaseMigration.Quiesce)
+	migrationInternal.POST("/resume", h.DatabaseMigration.Resume)
 
 	users := protected.Group("/users")
 	users.GET("", middleware.RequirePermission("user", "read"), h.User.GetUsers)

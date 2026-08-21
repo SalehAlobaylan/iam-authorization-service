@@ -19,6 +19,8 @@ type AccountDeletionService struct {
 	cms      *CMSSuspensionClient
 	email    EmailSender
 	ready    atomic.Bool
+	quiesced atomic.Bool
+	active   atomic.Int64
 }
 
 func NewAccountDeletionService(users *repository.UserRepository, tokens *repository.TokenRepository, requests *repository.AccountDeletionRepository, cms *CMSSuspensionClient, email EmailSender) *AccountDeletionService {
@@ -78,13 +80,38 @@ func (s *AccountDeletionService) Start() {
 	}()
 }
 func (s *AccountDeletionService) ProcessQueued() {
+	if s == nil || s.quiesced.Load() {
+		return
+	}
 	for range 20 {
+		if s.quiesced.Load() {
+			return
+		}
 		request, err := s.requests.ClaimNext(time.Now().UTC().Add(-5 * time.Minute))
 		if err != nil || request == nil {
 			return
 		}
+		s.active.Add(1)
 		s.process(request)
+		s.active.Add(-1)
 	}
+}
+
+func (s *AccountDeletionService) Quiesce() {
+	if s != nil {
+		s.quiesced.Store(true)
+	}
+}
+func (s *AccountDeletionService) Resume() {
+	if s != nil {
+		s.quiesced.Store(false)
+	}
+}
+func (s *AccountDeletionService) Quiescence() (bool, int64) {
+	if s == nil {
+		return false, 0
+	}
+	return s.quiesced.Load(), s.active.Load()
 }
 func (s *AccountDeletionService) process(request *models.AccountDeletionRequest) {
 	if err := s.cms.Sync(context.Background(), request.UserID.String(), request.TenantID, true); err != nil {

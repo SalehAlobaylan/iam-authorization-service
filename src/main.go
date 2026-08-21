@@ -22,6 +22,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("database connection failed: %v", err)
 	}
+	contract, contractErr := database.ReadContract(db)
+	if contractErr != nil {
+		log.Printf("database contract unavailable in %s mode: %v", contract.EnforcementMode, contractErr)
+	}
+	if err := database.EnforceContract(contract); err != nil {
+		log.Fatalf("refusing IAM startup: %v", err)
+	}
 
 	env := strings.ToLower(strings.TrimSpace(cfg.Env))
 	autoMigrate := env == "development" || env == "dev"

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/iam-authorization-service/src/config"
 	"github.com/yourusername/iam-authorization-service/src/handlers"
+	"github.com/yourusername/iam-authorization-service/src/middleware"
 	"github.com/yourusername/iam-authorization-service/src/repository"
 	"github.com/yourusername/iam-authorization-service/src/services"
 	"github.com/yourusername/iam-authorization-service/src/storage"
@@ -34,6 +35,8 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 	}
 
 	setupMiddleware(server.router)
+	middleware.InstallDatabaseWriterFenceCallbacks(db)
+	server.router.Use(middleware.DatabaseWriterFence(db))
 	configureTrustedProxies(server.router)
 	repos := initRepositories(db)
 	svcs := initServices(repos, cfg)
@@ -153,27 +156,29 @@ func initServices(repos *Repositories, cfg *config.Config) *Services {
 }
 
 type Handlers struct {
-	Auth           *handlers.AuthHandler
-	IAM            *handlers.IAMHandler
-	User           *handlers.UserHandler
-	Role           *handlers.RoleHandler
-	Admin          *handlers.AdminHandler
-	Health         *handlers.HealthHandler
-	Verification   *handlers.VerificationHandler
-	PasswordReset  *handlers.PasswordResetHandler
-	OperatorAccess *handlers.OperatorAccessHandler
+	Auth              *handlers.AuthHandler
+	IAM               *handlers.IAMHandler
+	User              *handlers.UserHandler
+	Role              *handlers.RoleHandler
+	Admin             *handlers.AdminHandler
+	Health            *handlers.HealthHandler
+	Verification      *handlers.VerificationHandler
+	PasswordReset     *handlers.PasswordResetHandler
+	OperatorAccess    *handlers.OperatorAccessHandler
+	DatabaseMigration *handlers.DatabaseMigrationHandler
 }
 
 func initHandlers(svcs *Services, db *gorm.DB) *Handlers {
 	return &Handlers{
-		Auth:           handlers.NewAuthHandler(svcs.Auth),
-		IAM:            handlers.NewIAMHandler(svcs.IAM, svcs.Authz),
-		User:           handlers.NewUserHandler(svcs.User, svcs.Deletion),
-		Role:           handlers.NewRoleHandler(svcs.Authz),
-		Admin:          handlers.NewAdminHandler(db),
-		Health:         handlers.NewHealthHandler(db, svcs.Deletion.Ready),
-		Verification:   handlers.NewVerificationHandler(svcs.Verification),
-		PasswordReset:  handlers.NewPasswordResetHandler(svcs.PasswordReset),
-		OperatorAccess: handlers.NewOperatorAccessHandler(svcs.IAM),
+		Auth:              handlers.NewAuthHandler(svcs.Auth),
+		IAM:               handlers.NewIAMHandler(svcs.IAM, svcs.Authz),
+		User:              handlers.NewUserHandler(svcs.User, svcs.Deletion),
+		Role:              handlers.NewRoleHandler(svcs.Authz),
+		Admin:             handlers.NewAdminHandler(db),
+		Health:            handlers.NewHealthHandler(db, svcs.Deletion.Ready),
+		Verification:      handlers.NewVerificationHandler(svcs.Verification),
+		PasswordReset:     handlers.NewPasswordResetHandler(svcs.PasswordReset),
+		OperatorAccess:    handlers.NewOperatorAccessHandler(svcs.IAM),
+		DatabaseMigration: handlers.NewDatabaseMigrationHandler(db, svcs.Deletion),
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yourusername/iam-authorization-service/src/database"
 	"gorm.io/gorm"
 )
 
@@ -39,13 +40,16 @@ func (h *HealthHandler) Health(c *gin.Context) {
 	}
 
 	deletionReady := h.accountDeletionReady != nil && h.accountDeletionReady()
-	if !deletionReady {
+	contract, contractErr := database.ReadContract(h.db)
+	contractReady := contract.EnforcementMode != "enforce" || (contractErr == nil && database.EnforceContract(contract) == nil)
+	if !deletionReady || !contractReady {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status":  "unhealthy",
 			"message": "required IAM migrations are not applied",
 			"components": gin.H{
-				"database":         "ready",
-				"account_deletion": "schema_unavailable",
+				"database":          "ready",
+				"account_deletion":  "schema_unavailable",
+				"database_contract": contract,
 			},
 		})
 		return
@@ -55,8 +59,9 @@ func (h *HealthHandler) Health(c *gin.Context) {
 		"status":  "healthy",
 		"message": "IAM Authorization Service is running",
 		"components": gin.H{
-			"database":         "ready",
-			"account_deletion": "ready",
+			"database":          "ready",
+			"account_deletion":  "ready",
+			"database_contract": contract,
 		},
 	})
 }

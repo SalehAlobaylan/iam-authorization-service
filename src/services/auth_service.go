@@ -195,9 +195,20 @@ func (s *AuthService) Login(email, password string) (*models.TokenPair, error) {
 	}, nil
 }
 
-func (s *AuthService) Reauthenticate(userID, password, purpose, planID, manifestHash string) (string, error) {
-	if strings.TrimSpace(purpose) != "feed_recovery" || strings.TrimSpace(planID) == "" || len(strings.TrimSpace(manifestHash)) != 64 {
+func (s *AuthService) Reauthenticate(userID, password, purpose, planID, manifestHash string, actions ...string) (string, error) {
+	purpose = strings.TrimSpace(purpose)
+	if (purpose != "feed_recovery" && purpose != "content_reset") || strings.TrimSpace(planID) == "" || len(strings.TrimSpace(manifestHash)) != 64 {
 		return "", utils.ValidationError("invalid re-auth binding")
+	}
+	if len(actions) > 1 {
+		return "", utils.ValidationError("invalid re-auth action binding")
+	}
+	action := ""
+	if len(actions) == 1 {
+		action = strings.ToLower(strings.TrimSpace(actions[0]))
+	}
+	if (purpose == "feed_recovery" && action != "") || (purpose == "content_reset" && !utils.IsContentResetReauthAction(action)) {
+		return "", utils.ValidationError("invalid re-auth action binding")
 	}
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil || user.SuspendedAt != nil {
@@ -206,7 +217,7 @@ func (s *AuthService) Reauthenticate(userID, password, purpose, planID, manifest
 	if err := utils.ComparePassword(user.PasswordHash, password); err != nil {
 		return "", utils.UnauthorizedError("invalid credentials")
 	}
-	proof, err := utils.GenerateReauthProof(user.ID.String(), user.Email, user.TenantID, purpose, planID, manifestHash, s.config.JWT.Secret, s.config.JWT.Issuer)
+	proof, err := utils.GenerateReauthProof(user.ID.String(), user.Email, user.TenantID, purpose, planID, manifestHash, s.config.JWT.Secret, s.config.JWT.Issuer, action)
 	if err != nil {
 		return "", utils.InternalServerError("failed to issue re-auth proof")
 	}

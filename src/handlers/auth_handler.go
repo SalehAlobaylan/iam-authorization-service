@@ -95,6 +95,7 @@ func (h *AuthHandler) Reauthenticate(c *gin.Context) {
 	var req struct {
 		Password     string `json:"password" binding:"required"`
 		Purpose      string `json:"purpose" binding:"required"`
+		Action       string `json:"action"`
 		PlanID       string `json:"plan_id" binding:"required"`
 		ManifestHash string `json:"manifest_hash" binding:"required"`
 	}
@@ -102,7 +103,7 @@ func (h *AuthHandler) Reauthenticate(c *gin.Context) {
 		respondError(c, utils.ValidationError("invalid request payload"))
 		return
 	}
-	proof, err := h.authService.Reauthenticate(claims.UserID, req.Password, req.Purpose, req.PlanID, req.ManifestHash)
+	proof, err := h.authService.Reauthenticate(claims.UserID, req.Password, req.Purpose, req.PlanID, req.ManifestHash, req.Action)
 	if err != nil {
 		respondError(c, err)
 		return

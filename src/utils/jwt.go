@@ -29,20 +29,53 @@ type ReauthProofClaims struct {
 	Email        string `json:"email"`
 	TenantID     string `json:"tenant_id"`
 	Purpose      string `json:"purpose"`
+	Action       string `json:"action,omitempty"`
 	PlanID       string `json:"plan_id"`
 	ManifestHash string `json:"manifest_hash"`
 	AuthTime     int64  `json:"auth_time"`
 	jwt.RegisteredClaims
 }
 
-func GenerateReauthProof(userID, email, tenantID, purpose, planID, manifestHash, secret, issuer string) (string, error) {
+func GenerateReauthProof(userID, email, tenantID, purpose, planID, manifestHash, secret, issuer string, actions ...string) (string, error) {
 	now := time.Now().UTC()
 	jti, err := uuid.NewV4()
 	if err != nil {
 		return "", err
 	}
-	claims := ReauthProofClaims{UserID: userID, Email: email, TenantID: tenantID, Purpose: purpose, PlanID: planID, ManifestHash: manifestHash, AuthTime: now.Unix(), RegisteredClaims: jwt.RegisteredClaims{Issuer: issuer, Subject: userID, ID: jti.String(), Audience: []string{"wahb-feed-recovery-reauth"}, IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute))}}
+	purpose = strings.TrimSpace(purpose)
+	action := ""
+	if len(actions) > 1 {
+		return "", fmt.Errorf("unsupported re-auth action binding")
+	}
+	if len(actions) == 1 {
+		action = strings.ToLower(strings.TrimSpace(actions[0]))
+	}
+	audience := ""
+	switch purpose {
+	case "feed_recovery":
+		if action != "" {
+			return "", fmt.Errorf("feed recovery re-auth does not accept a Content Reset action")
+		}
+		audience = "wahb-feed-recovery-reauth"
+	case "content_reset":
+		if !IsContentResetReauthAction(action) {
+			return "", fmt.Errorf("Content Reset re-auth requires a supported action binding")
+		}
+		audience = "wahb-content-reset-reauth"
+	default:
+		return "", fmt.Errorf("unsupported re-auth purpose")
+	}
+	claims := ReauthProofClaims{UserID: userID, Email: email, TenantID: tenantID, Purpose: purpose, Action: action, PlanID: planID, ManifestHash: manifestHash, AuthTime: now.Unix(), RegisteredClaims: jwt.RegisteredClaims{Issuer: issuer, Subject: userID, ID: jti.String(), Audience: []string{audience}, IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute))}}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(secret))
+}
+
+func IsContentResetReauthAction(action string) bool {
+	switch action {
+	case "start", "publish", "cleanup", "rollback", "news_exception", "history_retirement", "resume_intake", "control":
+		return true
+	default:
+		return false
+	}
 }
 
 // GenerateAccessToken generates a signed JWT access token for the given user.

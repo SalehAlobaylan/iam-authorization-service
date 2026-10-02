@@ -161,6 +161,9 @@ func seedPermissions(db *gorm.DB) error {
 		{"cccccccc-cccc-cccc-cccc-ccccccccccc2", "feed", "manage", "Manage feed configuration"},
 		{"dddddddd-dddd-dddd-dddd-ddddddddddd1", "aggregation", "read", "View aggregation jobs"},
 		{"dddddddd-dddd-dddd-dddd-ddddddddddd2", "aggregation", "manage", "Manage aggregation jobs"},
+		{"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1", "content_reset", "read", "View Content Reset plans and qualification"},
+		{"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee2", "content_reset", "plan", "Create and manage non-executing Content Reset plans"},
+		{"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee3", "content_reset", "execute", "Execute an independently qualified Content Reset campaign"},
 	}
 	for _, it := range items {
 		var existing models.Permission
@@ -220,6 +223,8 @@ var defaultRolePermissionAllowList = map[string]map[string]bool{
 		"feed:manage":        true,
 		"aggregation:read":   true,
 		"aggregation:manage": true,
+		"content_reset:read": true,
+		"content_reset:plan": true,
 	},
 }
 

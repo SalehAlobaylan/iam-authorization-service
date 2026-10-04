@@ -30,3 +30,23 @@ func (h *OperatorAccessHandler) GetSnapshot(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, snapshot)
 }
+
+// GetMySnapshot binds live database roles to the authenticated subject. A
+// browser cannot choose the actor, tenant, or machine capability.
+func (h *OperatorAccessHandler) GetMySnapshot(c *gin.Context) {
+	claims, err := claimsFromContext(c)
+	if err != nil {
+		respondError(c, utils.UnauthorizedError("missing auth context"))
+		return
+	}
+	snapshot, err := h.iamService.GetOperatorAccessSnapshot(claims.UserID, claims.TenantID)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	if !snapshot.Active {
+		respondError(c, utils.ForbiddenError("account is inactive"))
+		return
+	}
+	c.JSON(http.StatusOK, snapshot)
+}

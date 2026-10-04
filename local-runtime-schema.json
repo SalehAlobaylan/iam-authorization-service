@@ -1,0 +1,10 @@
+[
+  "users.id",
+  "users.email",
+  "users.password",
+  "roles.id",
+  "permissions.id",
+  "tokens.id",
+  "user_roles.user_id",
+  "role_permissions.role_id"
+]

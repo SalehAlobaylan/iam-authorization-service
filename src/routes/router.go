@@ -54,6 +54,7 @@ func setupRoutes(router *gin.Engine, h *Handlers, repos *Repositories, svcs *Ser
 
 	roles := protected.Group("/roles")
 	roles.GET("/me", h.Role.GetMyAccess)
+	roles.GET("/live", h.OperatorAccess.GetMySnapshot)
 	roles.POST("/assign", middleware.RequireRole("admin"), h.Role.AssignRole)
 	roles.GET("/users/:user_id", middleware.RequirePermission("user", "read"), h.Role.GetUserRoles)
 

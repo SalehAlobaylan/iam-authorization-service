@@ -101,6 +101,10 @@ type TenancyConfig struct {
  */
 func Load() (*Config, error) {
 	configPath := os.Getenv("CONFIG_PATH")
+	if os.Getenv("WAHB_MANAGED_ENV") == "1" {
+		// Managed launches supply all infrastructure explicitly.
+		configPath = ""
+	}
 	explicitPath := configPath != ""
 	if configPath == "" {
 		configPath = "src/config/config.yaml"
@@ -108,6 +112,9 @@ func Load() (*Config, error) {
 
 	var cfg Config
 	file, err := os.ReadFile(configPath)
+	if os.Getenv("WAHB_MANAGED_ENV") == "1" {
+		file, err = nil, os.ErrNotExist
+	}
 	if err != nil {
 		// A missing default config file is fine (env-only deployments). But if
 		// the operator explicitly set CONFIG_PATH, a missing/typo'd file is a

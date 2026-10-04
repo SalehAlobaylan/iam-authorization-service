@@ -50,6 +50,10 @@ func (h *AdminHandler) Seed(c *gin.Context) {
 // Up-only; rolling back requires a separate destructive endpoint we have
 // intentionally not exposed.
 func (h *AdminHandler) MigrateUp(c *gin.Context) {
+	if os.Getenv("WAHB_MANAGED_ENV") == "1" {
+		c.JSON(http.StatusConflict, gin.H{"error": "Stop the stack and use scripts/env.sh prepare; live schema mutation is disabled for managed environments"})
+		return
+	}
 	sqlDB, err := h.db.DB()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{

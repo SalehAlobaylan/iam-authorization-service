@@ -8,6 +8,7 @@ import (
 	"github.com/yourusername/iam-authorization-service/src/models"
 
 	"gorm.io/gorm"
+ "gorm.io/gorm/logger"
 )
 
 // UserRepository provides high-level, GORM-backed operations for User entities.
@@ -108,4 +109,19 @@ func (r *UserRepository) GetAllByTenant(tenantID string) ([]models.User, error) 
 		return nil, err
 	}
 	return users, nil
+}
+
+// EconomicsDirectory returns only bounded identity fields, scoped to the caller's tenant.
+func (r *UserRepository) EconomicsDirectory(tenant, q string, ids []string) ([]models.User, error) {
+	out := []models.User{}
+	query := r.db.Session(&gorm.Session{Logger:logger.Discard}).Select("id,username,email,tenant_id").Where("tenant_id=?", tenant)
+	if len(ids) > 0 {
+		query = query.Where("id IN ?", ids)
+	}
+	if q != "" {
+		like := "%" + q + "%"
+		query = query.Where("email ILIKE ? OR username ILIKE ? OR id::text ILIKE ?", like, like, like)
+	}
+	err := query.Order("id").Limit(101).Find(&out).Error
+	return out, err
 }

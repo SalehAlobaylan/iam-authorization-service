@@ -1,10 +1,16 @@
 package routes
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/iam-authorization-service/src/config"
@@ -17,9 +23,10 @@ import (
 )
 
 type Server struct {
-	config *config.Config
-	router *gin.Engine
-	db     *gorm.DB
+	config    *config.Config
+	router    *gin.Engine
+	db        *gorm.DB
+	economics *middleware.EconomicsCounter
 }
 
 func NewServer(cfg *config.Config, db *gorm.DB) *Server {
@@ -35,6 +42,9 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 	}
 
 	setupMiddleware(server.router)
+	economics := middleware.NewEconomicsCounter(cfg.CMS, cfg.Tenancy.DefaultTenantID)
+	server.router.Use(economics.Middleware())
+	server.economics = economics
 	middleware.InstallDatabaseWriterFenceCallbacks(db)
 	server.router.Use(middleware.DatabaseWriterFence(db))
 	configureTrustedProxies(server.router)
@@ -76,7 +86,27 @@ func (s *Server) Run() error {
 		addr = ":" + s.config.Server.Port
 	}
 	log.Printf("server starting on %s", addr)
-	return s.router.Run(addr)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	counterContext, stopCounters := context.WithCancel(context.Background())
+	defer stopCounters()
+	go s.economics.Run(counterContext)
+	httpServer := &http.Server{Addr: addr, Handler: s.router, ReadHeaderTimeout: 10 * time.Second}
+	finished := make(chan error, 1)
+	go func() { finished <- httpServer.ListenAndServe() }()
+	select {
+	case err := <-finished:
+		stop()
+		if !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+	case <-ctx.Done():
+		drain, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = httpServer.Shutdown(drain)
+		s.economics.Close(drain)
+	}
+	return nil
 }
 
 type Repositories struct {

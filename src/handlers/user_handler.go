@@ -3,6 +3,7 @@ package handlers
 import (
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/iam-authorization-service/src/models"
@@ -216,4 +217,31 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h *UserHandler) EconomicsDirectory(c *gin.Context) {
+	claims, err := claimsFromContext(c)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	ids := []string{}
+	if raw := c.Query("ids"); raw != "" {
+		ids = strings.Split(raw, ",")
+	}
+	rows, err := h.userService.EconomicsDirectory(claims, strings.TrimSpace(c.Query("q")), ids)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	more := len(rows) > 100
+	if more {
+		rows = rows[:100]
+	}
+	c.Header("Cache-Control", "private, no-store")
+	identities := make([]gin.H, 0, len(rows))
+	for _, r := range rows {
+		identities = append(identities, gin.H{"id": r.ID, "username": r.Username, "email": r.Email})
+	}
+	c.JSON(200, gin.H{"users": identities, "has_more": more})
 }

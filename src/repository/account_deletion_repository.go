@@ -156,3 +156,9 @@ func (r *AccountDeletionRepository) Fail(id string, message string) error {
 func (r *AccountDeletionRepository) Save(request *models.AccountDeletionRequest) error {
 	return r.db.Save(request).Error
 }
+
+func (r *AccountDeletionRepository) EconomicsErasureBarriers(after time.Time, user string) ([]models.AccountDeletionRequest, error) {
+	out := []models.AccountDeletionRequest{}
+	err := r.db.Select("user_id,tenant_id,created_at").Where("(created_at,user_id)>(?,?::uuid)", after, user).Order("created_at,user_id").Limit(101).Find(&out).Error
+	return out, err
+}

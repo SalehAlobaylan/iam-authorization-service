@@ -242,3 +242,18 @@ func (s *UserService) DeleteUser(claims *utils.AccessTokenClaims, userID string)
 	}
 	return nil
 }
+
+func (s *UserService) EconomicsDirectory(claims *utils.AccessTokenClaims, q string, ids []string) ([]models.User, error) {
+	if claims==nil || claims.TenantID == "" || !s.authz.IsAdmin(claims) {
+		return nil, utils.ForbiddenError("administrator access required")
+	}
+	if len(q) > 160 || len(ids) > 100 || len(ids) == 0 && len(q) < 2 {
+		return nil, utils.ValidationError("Use a bounded identity search or at most 100 IDs")
+	}
+	for _, id := range ids {
+		if utils.ValidateUUID(id) != nil {
+			return nil, utils.ValidationError("invalid account ID")
+		}
+	}
+	return s.userRepo.EconomicsDirectory(claims.TenantID, q, ids)
+}

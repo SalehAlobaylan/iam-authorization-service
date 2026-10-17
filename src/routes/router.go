@@ -1,7 +1,9 @@
 package routes
 
 import (
+	"github.com/gofrs/uuid"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/iam-authorization-service/src/config"
@@ -35,6 +37,37 @@ func setupRoutes(router *gin.Engine, h *Handlers, repos *Repositories, svcs *Ser
 	operatorInternal := router.Group("/internal/access")
 	operatorInternal.Use(middleware.RequireServiceToken(cfg.Operator.AccessSnapshotToken))
 	operatorInternal.GET("/users/:user_id", h.OperatorAccess.GetSnapshot)
+	operatorInternal.GET("/economics/erasures", func(c *gin.Context) {
+		after := time.Unix(0, 0).UTC()
+		if raw := c.Query("after"); raw != "" {
+			parsed, e := time.Parse(time.RFC3339Nano, raw)
+			if e != nil {
+				c.JSON(400, gin.H{"error": "Invalid cursor"})
+				return
+			}
+			after = parsed
+		}
+		user := c.DefaultQuery("user_id", "00000000-0000-0000-0000-000000000000")
+		if _, e := uuid.FromString(user); e != nil {
+			c.JSON(400, gin.H{"error": "Invalid cursor"})
+			return
+		}
+		rows, e := repos.Deletion.EconomicsErasureBarriers(after, user)
+		if e != nil {
+			c.JSON(503, gin.H{"error": "Erasure authority unavailable"})
+			return
+		}
+		more := len(rows) > 100
+		if more {
+			rows = rows[:100]
+		}
+		out := []gin.H{}
+		for _, r := range rows {
+			out = append(out, gin.H{"user_id": r.UserID, "tenant_id": r.TenantID, "erased_at": r.CreatedAt})
+		}
+		c.Header("Cache-Control", "no-store")
+		c.JSON(200, gin.H{"erasures": out, "has_more": more})
+	})
 
 	migrationInternal := router.Group("/internal/database-migration")
 	migrationInternal.Use(middleware.RequireServiceToken(os.Getenv("IAM_MIGRATION_COORDINATOR_SERVICE_TOKEN")))
@@ -63,6 +96,7 @@ func setupRoutes(router *gin.Engine, h *Handlers, repos *Repositories, svcs *Ser
 	iam.GET("/roles", h.IAM.ListRoles)
 	iam.GET("/permissions", h.IAM.ListPermissions)
 	iam.GET("/users", h.IAM.ListUsers)
+	iam.GET("/economics-directory", middleware.RequireRole("admin"), h.User.EconomicsDirectory)
 	iam.GET("/users/:user_id/roles", h.IAM.GetUserRoles)
 	iam.PUT("/users/:user_id/roles", middleware.RequirePermission("iam", "write"), h.IAM.UpdateUserRoles)
 	iam.PUT("/users/:user_id/permissions", middleware.RequirePermission("iam", "write"), h.IAM.UpdateUserPermissions)

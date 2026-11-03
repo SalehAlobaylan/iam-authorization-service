@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yourusername/iam-authorization-service/src/database"
@@ -20,27 +22,27 @@ func NewHealthHandler(db *gorm.DB, accountDeletionReady func() bool) *HealthHand
 // Health returns the health status of the service
 // GET /health
 func (h *HealthHandler) Health(c *gin.Context) {
-	// Check database connection
-	sqlDB, err := h.db.DB()
-	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status":  "unhealthy",
-			"message": "database connection error",
-		})
-		return
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2500*time.Millisecond)
+	defer cancel()
+	contract, contractErr := database.ReadHealthContract(h.db.WithContext(ctx))
+	if ctx.Err() != nil {
+		contractErr = ctx.Err()
 	}
-
-	// Ping the database
-	if err := sqlDB.Ping(); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status":  "unhealthy",
-			"message": "database ping failed",
-		})
-		return
+	// Successful reads prove connectivity. On an error, observe mode still
+	// needs an independent connection check before tolerating contract drift.
+	if contractErr != nil {
+		sqlDB, err := h.db.DB()
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "message": "database connection error"})
+			return
+		}
+		if err := sqlDB.PingContext(ctx); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unhealthy", "message": "database ping failed"})
+			return
+		}
 	}
 
 	deletionReady := h.accountDeletionReady != nil && h.accountDeletionReady()
-	contract, contractErr := database.ReadContract(h.db)
 	contractReady := contract.EnforcementMode != "enforce" || (contractErr == nil && database.EnforceContract(contract) == nil)
 	if !deletionReady || !contractReady {
 		c.JSON(http.StatusServiceUnavailable, gin.H{

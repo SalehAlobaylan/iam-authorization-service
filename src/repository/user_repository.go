@@ -8,7 +8,7 @@ import (
 	"github.com/yourusername/iam-authorization-service/src/models"
 
 	"gorm.io/gorm"
- "gorm.io/gorm/logger"
+	"gorm.io/gorm/logger"
 )
 
 // UserRepository provides high-level, GORM-backed operations for User entities.
@@ -17,6 +17,8 @@ import (
 type UserRepository struct {
 	db *gorm.DB
 }
+
+var ErrUserNotFound = errors.New("user not found")
 
 // NewUserRepository creates a new UserRepository bound to the given *gorm.DB.
 func NewUserRepository(db *gorm.DB) *UserRepository {
@@ -33,7 +35,7 @@ func (r *UserRepository) GetByEmail(email string) (*models.User, error) {
 	var user models.User
 	if err := r.db.Where("email = ?", email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("user not found")
+			return nil, ErrUserNotFound
 		}
 		return nil, err
 	}
@@ -57,7 +59,7 @@ func (r *UserRepository) GetByID(id string) (*models.User, error) {
 	var user models.User
 	if err := r.db.First(&user, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("user not found")
+			return nil, ErrUserNotFound
 		}
 		return nil, err
 	}
@@ -114,7 +116,7 @@ func (r *UserRepository) GetAllByTenant(tenantID string) ([]models.User, error) 
 // EconomicsDirectory returns only bounded identity fields, scoped to the caller's tenant.
 func (r *UserRepository) EconomicsDirectory(tenant, q string, ids []string) ([]models.User, error) {
 	out := []models.User{}
-	query := r.db.Session(&gorm.Session{Logger:logger.Discard}).Select("id,username,email,tenant_id").Where("tenant_id=?", tenant)
+	query := r.db.Session(&gorm.Session{Logger: logger.Discard}).Select("id,username,email,tenant_id").Where("tenant_id=?", tenant)
 	if len(ids) > 0 {
 		query = query.Where("id IN ?", ids)
 	}

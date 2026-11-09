@@ -2,7 +2,6 @@ package repository
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/yourusername/iam-authorization-service/src/models"
@@ -16,6 +15,8 @@ import (
 type TokenRepository struct {
 	db *gorm.DB
 }
+
+var ErrRefreshTokenNotFound = errors.New("token not found")
 
 // NewTokenRepository creates a new TokenRepository bound to the given *gorm.DB.
 func NewTokenRepository(db *gorm.DB) *TokenRepository {
@@ -32,7 +33,7 @@ func (r *TokenRepository) GetByRefreshToken(refreshToken string) (*models.Token,
 	var token models.Token
 	if err := r.db.Where("refresh_token = ?", refreshToken).First(&token).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("token not found")
+			return nil, ErrRefreshTokenNotFound
 		}
 		return nil, err
 	}

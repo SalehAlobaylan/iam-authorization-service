@@ -1,11 +1,12 @@
 package routes
 
 import (
-	"github.com/gofrs/uuid"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gofrs/uuid"
 	"github.com/yourusername/iam-authorization-service/src/config"
 	"github.com/yourusername/iam-authorization-service/src/middleware"
 )
@@ -21,15 +22,32 @@ func setupRoutes(router *gin.Engine, h *Handlers, repos *Repositories, svcs *Ser
 	auth.POST("/register", h.Auth.Register)
 	auth.POST("/login", h.Auth.Login)
 	auth.POST("/refresh", h.Auth.Refresh)
+	auth.POST("/revoke-session", h.Auth.RevokeSession)
 	auth.POST("/verify-email", h.Verification.VerifyEmail)
 	auth.POST("/resend-verification", h.Verification.ResendVerification)
 	auth.POST("/forgot-password", h.PasswordReset.ForgotPassword)
 	auth.POST("/reset-password", h.PasswordReset.ResetPassword)
+	auth.GET("/console-capabilities", func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+		c.JSON(http.StatusOK, gin.H{
+			"origin": cfg.ConsoleAuth.Origin, "recovery": cfg.ConsoleAuth.Recovery, "passkeys": h.Passkeys != nil,
+		})
+	})
+	if h.Passkeys != nil {
+		auth.POST("/passkeys/authentication/begin", h.Passkeys.BeginAuthentication)
+		auth.POST("/passkeys/authentication/finish", h.Passkeys.FinishAuthentication)
+	}
 
 	protected := v1.Group("")
 	protected.Use(middleware.AuthenticateWithClaims(cfg.JWT.Secret, cfg.JWT.Issuer, cfg.JWT.Audience))
 	protected.Use(middleware.RejectSuspendedUser(repos.User))
 	protected.POST("/auth/logout", h.Auth.Logout)
+	if h.Passkeys != nil {
+		protected.GET("/auth/passkeys", h.Passkeys.List)
+		protected.POST("/auth/passkeys/registration/begin", h.Passkeys.BeginRegistration)
+		protected.POST("/auth/passkeys/registration/finish", h.Passkeys.FinishRegistration)
+		protected.POST("/auth/passkeys/remove", h.Passkeys.Remove)
+	}
 	protected.POST("/auth/reauth", middleware.RequireRole("admin"), h.Auth.Reauthenticate)
 
 	// CMS alone calls this capability to refresh durable Operator authority.

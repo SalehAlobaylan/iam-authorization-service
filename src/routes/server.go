@@ -50,8 +50,16 @@ func NewServer(cfg *config.Config, db *gorm.DB) *Server {
 	configureTrustedProxies(server.router)
 	repos := initRepositories(db)
 	svcs := initServices(repos, cfg)
-	handlers := initHandlers(svcs, db)
-	setupRoutes(server.router, handlers, repos, svcs, cfg)
+	endpoints := initHandlers(svcs, db, cfg)
+	if cfg.ConsoleAuth.Passkeys {
+		passkeys, err := services.NewPasskeys(db, svcs.Auth, cfg.ConsoleAuth.Origin)
+		if err != nil {
+			log.Printf("Console passkeys disabled: %v", err)
+		} else {
+			endpoints.Passkeys = handlers.NewPasskeyHandler(passkeys)
+		}
+	}
+	setupRoutes(server.router, endpoints, repos, svcs, cfg)
 
 	return server
 }
@@ -186,6 +194,7 @@ func initServices(repos *Repositories, cfg *config.Config) *Services {
 }
 
 type Handlers struct {
+	Passkeys          *handlers.PasskeyHandler
 	Auth              *handlers.AuthHandler
 	IAM               *handlers.IAMHandler
 	User              *handlers.UserHandler
@@ -198,7 +207,7 @@ type Handlers struct {
 	DatabaseMigration *handlers.DatabaseMigrationHandler
 }
 
-func initHandlers(svcs *Services, db *gorm.DB) *Handlers {
+func initHandlers(svcs *Services, db *gorm.DB, cfg *config.Config) *Handlers {
 	return &Handlers{
 		Auth:              handlers.NewAuthHandler(svcs.Auth),
 		IAM:               handlers.NewIAMHandler(svcs.IAM, svcs.Authz),
@@ -207,7 +216,7 @@ func initHandlers(svcs *Services, db *gorm.DB) *Handlers {
 		Admin:             handlers.NewAdminHandler(db),
 		Health:            handlers.NewHealthHandler(db, svcs.Deletion.Ready),
 		Verification:      handlers.NewVerificationHandler(svcs.Verification),
-		PasswordReset:     handlers.NewPasswordResetHandler(svcs.PasswordReset),
+		PasswordReset:     handlers.NewPasswordResetHandler(svcs.PasswordReset, cfg.ConsoleAuth.Recovery),
 		OperatorAccess:    handlers.NewOperatorAccessHandler(svcs.IAM),
 		DatabaseMigration: handlers.NewDatabaseMigrationHandler(db, svcs.Deletion),
 	}

@@ -10,11 +10,12 @@ import (
 )
 
 type PasswordResetHandler struct {
-	resetService *services.PasswordResetService
+	resetService   *services.PasswordResetService
+	consoleEnabled bool
 }
 
-func NewPasswordResetHandler(resetService *services.PasswordResetService) *PasswordResetHandler {
-	return &PasswordResetHandler{resetService: resetService}
+func NewPasswordResetHandler(resetService *services.PasswordResetService, consoleEnabled bool) *PasswordResetHandler {
+	return &PasswordResetHandler{resetService: resetService, consoleEnabled: consoleEnabled}
 }
 
 // ForgotPassword handles POST /api/v1/auth/forgot-password
@@ -25,7 +26,16 @@ func (h *PasswordResetHandler) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	if err := h.resetService.ForgotPassword(req.Email); err != nil {
+	if req.Client == "console" && !h.consoleEnabled {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	if err := h.resetService.ForgotPassword(req.Email, req.Client == "console"); err != nil {
+		if req.Client == "console" {
+			// Do not reveal whether an account was found even if issuing its link failed.
+			c.JSON(http.StatusOK, gin.H{"message": "if the email exists, a password reset link has been sent"})
+			return
+		}
 		respondError(c, err)
 		return
 	}

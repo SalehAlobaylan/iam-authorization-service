@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -18,6 +19,10 @@ func RejectSuspendedUser(users *repository.UserRepository) gin.HandlerFunc {
 			return
 		}
 		user, err := users.GetByID(claims.UserID)
+		if err != nil && !errors.Is(err, repository.ErrUserNotFound) {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "account lookup unavailable"})
+			return
+		}
 		if err != nil || user.SuspendedAt != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "account suspended"})
 			return

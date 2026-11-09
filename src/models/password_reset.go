@@ -47,7 +47,8 @@ func (p *PasswordReset) IsUsed() bool {
 
 // ForgotPasswordRequest captures the request payload for initiating a password reset.
 type ForgotPasswordRequest struct {
-	Email string `json:"email" binding:"required,email"`
+	Email  string `json:"email" binding:"required,email"`
+	Client string `json:"client,omitempty" binding:"omitempty,oneof=console"`
 }
 
 // ResetPasswordRequest captures the request payload for completing a password reset.

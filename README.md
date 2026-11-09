@@ -4,7 +4,7 @@ The identity and access service for the Wahb platform. Owns user registration, l
 
 It does **not** hold CMS business logic, content, or feeds — it is purely auth + identity.
 
-**Port:** 4003 · **Base path:** `/api/v1` · **Stack:** Go 1.24, Gin, GORM, PostgreSQL, JWT
+**Port:** 4003 · **Base path:** `/api/v1` · **Stack:** Go 1.26, Gin, GORM, PostgreSQL, JWT
 
 > Full architecture and data-model reference: [`../docs/iam-service.md`](../docs/iam-service.md). System overview: [`../docs/index.md`](../docs/index.md).
 
@@ -14,7 +14,7 @@ Platform-Console (the admin dashboard, https://wahb-console.salehspace.dev) uses
 
 ## Tech Stack
 
-- **Language:** Go 1.24 (Gin HTTP, GORM ORM)
+- **Language:** Go 1.26 (Gin HTTP, GORM ORM)
 - **Database:** PostgreSQL (Docker Postgres published on host port **5433** to avoid colliding with a local `5432`)
 - **Auth:** JWT HS256 (access + refresh), bcrypt password hashing, RBAC + ABAC middleware
 - **Tokens:** refresh-token rotation persisted in the `tokens` table

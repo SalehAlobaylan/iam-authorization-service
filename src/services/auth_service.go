@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"sort"
@@ -127,11 +128,18 @@ func (s *AuthService) Register(username, email, password, tenantID string) (*mod
 func (s *AuthService) Login(email, password string) (*models.TokenPair, error) {
 	user, err := s.userRepo.GetByEmail(strings.ToLower(strings.TrimSpace(email)))
 	if err != nil {
-		return nil, utils.UnauthorizedError("invalid credentials")
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, utils.UnauthorizedError("invalid credentials")
+		}
+		return nil, utils.InternalServerError("could not look up account")
 	}
 	if err := utils.ComparePassword(user.PasswordHash, password); err != nil {
 		return nil, utils.UnauthorizedError("invalid credentials")
 	}
+	return s.issueLoginSession(user)
+}
+
+func (s *AuthService) issueLoginSession(user *models.User) (*models.TokenPair, error) {
 	if user.SuspendedAt != nil {
 		return nil, utils.UnauthorizedError("account suspended")
 	}
@@ -227,7 +235,10 @@ func (s *AuthService) Reauthenticate(userID, password, purpose, planID, manifest
 func (s *AuthService) Refresh(refreshToken string) (*models.TokenPair, error) {
 	token, err := s.tokenRepo.GetByRefreshToken(refreshToken)
 	if err != nil {
-		return nil, utils.UnauthorizedError("invalid refresh token")
+		if errors.Is(err, repository.ErrRefreshTokenNotFound) {
+			return nil, utils.UnauthorizedError("invalid refresh token")
+		}
+		return nil, utils.InternalServerError("could not look up session")
 	}
 	if time.Now().After(token.ExpiresAt) {
 		_ = s.tokenRepo.Revoke(refreshToken)
@@ -236,7 +247,10 @@ func (s *AuthService) Refresh(refreshToken string) (*models.TokenPair, error) {
 
 	user, err := s.userRepo.GetByID(token.UserID.String())
 	if err != nil {
-		return nil, utils.UnauthorizedError("user not found")
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, utils.UnauthorizedError("user not found")
+		}
+		return nil, utils.InternalServerError("could not look up account")
 	}
 	if user.SuspendedAt != nil {
 		_ = s.tokenRepo.Revoke(refreshToken)

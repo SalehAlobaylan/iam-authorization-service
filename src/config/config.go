@@ -11,15 +11,22 @@ import (
 )
 
 type Config struct {
-	Env      string         `yaml:"env"`
-	Server   ServerConfig   `yaml:"server"`
-	Database DatabaseConfig `yaml:"database"`
-	JWT      JWTConfig      `yaml:"jwt"`
-	Tenancy  TenancyConfig  `yaml:"tenancy"`
-	Email    EmailConfig    `yaml:"email"`
-	Storage  StorageConfig  `yaml:"storage"`
-	CMS      CMSConfig      `yaml:"cms"`
-	Operator OperatorConfig `yaml:"operator"`
+	Env         string            `yaml:"env"`
+	Server      ServerConfig      `yaml:"server"`
+	Database    DatabaseConfig    `yaml:"database"`
+	JWT         JWTConfig         `yaml:"jwt"`
+	Tenancy     TenancyConfig     `yaml:"tenancy"`
+	Email       EmailConfig       `yaml:"email"`
+	Storage     StorageConfig     `yaml:"storage"`
+	CMS         CMSConfig         `yaml:"cms"`
+	Operator    OperatorConfig    `yaml:"operator"`
+	ConsoleAuth ConsoleAuthConfig `yaml:"console_auth"`
+}
+
+type ConsoleAuthConfig struct {
+	Origin   string `yaml:"origin"`
+	Recovery bool   `yaml:"recovery"`
+	Passkeys bool   `yaml:"passkeys"`
 }
 
 // StorageConfig holds the S3-compatible object-storage contract used for avatar
@@ -261,8 +268,42 @@ func Load() (*Config, error) {
 	if err := validateProductionEmailConfig(&cfg); err != nil {
 		return nil, err
 	}
+	if err := loadConsoleAuth(&cfg); err != nil {
+		return nil, err
+	}
 
 	return &cfg, nil
+}
+
+func loadConsoleAuth(cfg *Config) error {
+	if value := os.Getenv("CONSOLE_AUTH_ORIGIN"); value != "" {
+		cfg.ConsoleAuth.Origin = strings.TrimSpace(value)
+	}
+	for name, enabled := range map[string]*bool{
+		"CONSOLE_PASSWORD_RECOVERY_ENABLED": &cfg.ConsoleAuth.Recovery,
+		"CONSOLE_PASSKEYS_ENABLED":          &cfg.ConsoleAuth.Passkeys,
+	} {
+		if raw := os.Getenv(name); raw != "" {
+			value, err := strconv.ParseBool(raw)
+			if err != nil {
+				return fmt.Errorf("%s must be a boolean", name)
+			}
+			*enabled = value
+		}
+	}
+	if !cfg.ConsoleAuth.Recovery && !cfg.ConsoleAuth.Passkeys {
+		return nil
+	}
+	origin := cfg.ConsoleAuth.Origin
+	env := strings.ToLower(strings.TrimSpace(cfg.Env))
+	allowLocal := env == "dev" || env == "development" || env == "test"
+	if origin != "https://wahb-console.salehspace.dev" && !(allowLocal && origin == "http://localhost:3005") {
+		return fmt.Errorf("Console authentication requires the deployed Console origin or localhost in development")
+	}
+	if cfg.ConsoleAuth.Recovery && (cfg.Email.SMTPHost == "" || cfg.Email.FromAddress == "") {
+		return fmt.Errorf("Console password recovery requires SMTP_HOST and EMAIL_FROM")
+	}
+	return nil
 }
 
 func databaseURLNeedsSimpleProtocol(databaseURL string) bool {

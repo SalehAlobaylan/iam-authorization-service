@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -38,8 +39,8 @@ func NewPasswordResetService(
 
 // ForgotPassword creates a reset token and sends a reset email.
 // Always returns nil to avoid revealing whether the email exists.
-func (s *PasswordResetService) ForgotPassword(email string) error {
-	user, err := s.userRepo.GetByEmail(email)
+func (s *PasswordResetService) ForgotPassword(email string, console bool) error {
+	user, err := s.userRepo.GetByEmail(strings.ToLower(strings.TrimSpace(email)))
 	if err != nil {
 		// Don't reveal whether the email exists
 		return nil
@@ -67,6 +68,9 @@ func (s *PasswordResetService) ForgotPassword(email string) error {
 		baseURL = "http://localhost:3005"
 	}
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", baseURL, token.String())
+	if console {
+		resetURL = fmt.Sprintf("%s/reset-password#token=%s", s.cfg.ConsoleAuth.Origin, token.String())
+	}
 
 	subject := "Reset your password"
 	body := fmt.Sprintf(`<h2>Password Reset</h2>

@@ -10,6 +10,23 @@ import (
 	"github.com/yourusername/iam-authorization-service/src/utils"
 )
 
+// RevokeSession uses possession of the opaque refresh credential as authority.
+// The existing access-token-authenticated logout endpoint remains available.
+func (h *AuthHandler) RevokeSession(c *gin.Context) {
+	var req struct {
+		RefreshToken string `json:"refresh_token" binding:"required,uuid"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondError(c, utils.ValidationError("valid refresh token is required"))
+		return
+	}
+	if err := h.authService.Logout(req.RefreshToken); err != nil {
+		respondError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
 type AuthHandler struct {
 	authService *services.AuthService
 }
